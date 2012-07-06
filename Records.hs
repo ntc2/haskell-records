@@ -21,48 +21,42 @@ mod (Lens _ m) = m
 set :: Lens a b -> b -> a -> a
 set l x = mod l (const x)
 
--- 'Lens' composition.
+-- Lens composition.
 (#.#) :: Lens b c -> Lens a b -> Lens a c
 l1 #.# l2 = Lens (get l1 . get l2) (mod l2 . mod l1)
+
 -- Lenses form a category.
 instance Category Lens where
-  id = Lens id id
+  id  = Lens id id
   (.) = (#.#)
 
--- Has classe
--- ==========
+-- Has class: class per label
+-- ==========================
 --
 -- Could use type functions instead ... some people don't like
 -- functional dependencies.  But I think fundeps look better here.
--- Compare e.g.
 --
---   Has_x l r t => r -> t
+-- Compare
+--
+--   _x :: Has_x r t => Lens r t
 --
 -- with
 --
---   Has_x l r => r -> HasT_x r
+--   _x :: Has_x r   => Lens r (HasT_x r)
 --
 -- where 'HasT_x' is the type function that computes the type of the
 -- 'x' field in 'r'.
-
--- Has: Class per label
--- --------------------
 --
 -- All the classes look the same ... could maybe parameterize by a
 -- label, maybe using '-XDataKinds'.
-class Has_x r t | r -> t where
-  _x :: Lens r t
-class Has_y r t | r -> t where
-  _y :: Lens r t
-class Has_z r t | r -> t where
-  _z :: Lens r t
+class Has_x r t | r -> t where _x :: Lens r t
+class Has_y r t | r -> t where _y :: Lens r t
+class Has_z r t | r -> t where _z :: Lens r t
 
-class Has_1 r t | r -> t where
-  _1 :: Lens r t
-class Has_2 r t | r -> t where
-  _2 :: Lens r t
-class Has_3 r t | r -> t where
-  _3 :: Lens r t
+-- For tuples.
+class Has_1 r t | r -> t where _1 :: Lens r t
+class Has_2 r t | r -> t where _2 :: Lens r t
+class Has_3 r t | r -> t where _3 :: Lens r t
 
 -- Record implementation
 -- =====================
@@ -84,21 +78,20 @@ t_x_y_z = Lens get mod where
   get   (T_x_y_z t) = t
   mod f (T_x_y_z t) = T_x_y_z $ f t
 
--- Records with one field are a little special.  The newtype here is
--- the same:
+-- Records with one field are special.  The newtype here is the same:
 newtype T_x tx = T_x tx
 t_x :: Lens (T_x tx) tx
 t_x = Lens get mod where
   get   (T_x t) = t
   mod f (T_x t) = T_x $ f t
 -- , but the has-instance is degenerate, since the "tuple lens" 't_x'
--- is already the has instance:
+-- is already the 'Has_x' instance:
 instance Has_x (T_x tx) tx where
   _x = _1 . t_x where _1 = id
 
 
--- Has instances
--- -------------
+-- 'Has_*' instances
+-- -----------------
 instance Has_x (T_x_y_z tx ty tz) tx where
   _x = _1 . t_x_y_z
 instance Has_y (T_x_y_z tx ty tz) ty where
@@ -120,30 +113,22 @@ instance Has_x (T_x_y_z tx ty tz) tx where
 -- 1-tuples
 -- --------
 --
--- Haskell doesn't have 1-tuples and we make an identity instance
--- because it conflicts with all other instances:
+-- Haskell doesn't have 1-tuples and an identity instance would
+-- conflict with all other instances:
 {-
 instance Has_1 t1 t1 where
   _1 = id
 -}
--- However, we could create a newtype to achieve this:
-newtype Wrap t = Wrap t
-instance Has_1 (Wrap t) t where
-  _1 = Lens get mod where
-    get   (Wrap x1) = x1
-    mod f (Wrap x1) = Wrap $ f x1
--- But in practice, a record with one field is just implemented by a
--- trivial newtype:
 
 -- 2-tuples
 -- --------
 instance Has_1 (t1,t2) t1 where
   _1 = Lens get mod where
-    get   (x1,x2)  = x1
+    get   (x1,x2) = x1 -- fst
     mod f (x1,x2) = (f x1,x2)
 instance Has_2 (t1,t2) t2 where
   _2 = Lens get mod where
-    get   (x1,x2) = x2
+    get   (x1,x2) = x2 -- snd
     mod f (x1,x2) = (x1,f x2)
 
 -- 3-tuples
@@ -160,3 +145,5 @@ instance Has_3 (t1,t2,t3) t3 where
   _3 = Lens get mod where
     get   (x1,x2,x3) = x3
     mod f (x1,x2,x3) = (x1,x2,f x3)
+
+-- 4-tuples, 5-tuples, ...
