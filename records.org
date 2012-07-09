@@ -1,0 +1,873 @@
+haskell records are not very good
+
+see also http://hackage.haskell.org/package/records
+
+* problems include:
+- can't reuse field names across different sum types. e.g.
+
+    data T = T1 {x::X} | T2 {x::X}
+
+  is ok, but
+
+    data T1 = T1 {x::X}
+    data T2 = T2 {x::X}
+
+  is not.
+
+  nice to have something like
+
+    class a{x::t} where
+      x :: a -> t
+
+  where 'a{x::t}' is short for 'Has_x t a', and (see below), maybe
+  also
+
+    class a{xM::m t} where
+      xM :: a -> m t
+
+  then, if we had some way to override default instances, using
+  instance chains or overlapping instances, we could have sensible (?)
+  defaults like
+
+    instance Monad m => a{xM::m t} where
+      xM = fail "no x field"
+
+    instance a{xM::Maybe t} => a{x::t} where
+      x = maybe (error "no x field") id . xM
+
+  but then how to treat the monadic lookups?  same syntax?  if they
+  were actual functions, then at least lookup would still be easy to
+  support
+
+    r # (xM >=> yM)
+
+  but setters and modifiers are trickier.
+
+- can't reuse field names across different field types, e.g.
+
+    data FSObj = File {contents::[Byte]}
+               | Dir {contents::[FSObj]}
+
+  is not ok.  this example is taken from the 1999 mark and simon paper
+  https://research.microsoft.com/en-us/um/people/simonpj/Papers/records.htm
+
+- field modifications, and nested-field setting, are clumsy
+
+  composing look-ups is not bad
+
+    r :: {x::{y::T}}
+    y . x $ r :: T
+
+  but, field modifications
+
+    r { x = f . x $ r }
+    r { x = (x r) { y = g . y . x $ r } }
+
+  and nested-field setting
+
+    r { x = (x r) { y = e } }
+
+  are ugly.
+
+  something like
+
+    r.x.y
+
+    r.x.= f
+    r.x.y.= g -- . in .= is like function composition, which reminds us of modification
+              -- fclabels uses (=.) here in PureM 
+
+    r.x.y:= e -- := is like mutating assignment
+              -- fclabels uses (=:) here in PureM
+
+  whereas
+
+    r.x.y = z
+
+  could still be used in patterns to match 'r's with 'z' in the 'y'
+  field of the 'x' field.
+
+  or maybe better to use something like
+
+    r#x#y -- the jones and jones paper suggests # for composition i think
+
+  where
+
+    infixl (#)
+    x # f = f x
+
+  makes sense for look-ups, but we probably have to modify the
+  language to support
+
+    r#x#y .= g -- or maybe r#x#y #= g, where now # in #= reminds us of record access
+  
+  and
+
+    r#x#y := e
+
+- field set and modify are not first class
+
+  in the sense that you can't apply a standalone setter
+
+    map ({ x = 5 }) [r]
+
+  and can't even write a standalone modifier. instead, you write
+  something like
+
+    map (\r -> r { x = 5 }) [r]
+    map (\r -> r { x = f . x $ r }) [r]
+
+  while it would be nice to write
+
+    map (#x := 5) [r]
+    map (#x #= f) [r]
+
+- no safe versions of field selectors
+
+  e.g., for
+
+    data [a] = [] | (head::a):(tail::[a])
+
+  we have 'head' and 'tail' unsafe. getting something like
+
+    headM :: Monad m => [a] -> m a
+    tailM :: Monad m => [a] -> m [a]
+
+  for free would be nice.
+
+* another syntax
+
+  by keeping the braces, we avoid conflicts with existing non-record
+  syntax.  e.g.
+
+    r {x}      === r#x
+    r {x := e} === r#x := e
+    r {x .= f} === r#x #= f
+
+ and then nest in the obvious way
+
+    r {x.y}
+    r {x.y := e }
+    r {x.y .= f}
+
+ but, unlike existing haskell, we also make these first class, so
+ that e.g.
+
+   map ({x.y .= f}) [r]
+
+ is accepted.
+
+* trouble with fancy records
+
+- tricky overlapping instance problems
+
+  recall the 'FSObj' example from above
+
+    data FSObj = File {contents::[Byte]}
+               | Dir {contents::[FSObj]}
+
+  now we have functions with weird polymorphism?
+
+    concatMap contents :: [FSObj] -> [Byte]
+                       :: [FSObj] -> [FSObj]
+                       :: a{contents::[t]} => a -> [t]
+
+  hmm, no, actually, this is the familiar "ad-hoc polymorphism in the
+  return type".  it's already present in haskell.
+
+- do we allow first class records?  if "yes", do we distinguish
+  between a bare first class record and an ADT with a labeled record
+  in it's sum?
+
+  e.g., can you write
+
+    {x = "asdf", y = True} :: a{x::String,y::Bool} => a
+
+  and if yes, do we treat
+
+    data FSObj = File {contents::[Byte]}
+               | Dir {contents::[FSObj]}
+
+  as
+
+    data FSObj = a{contents::[Byte]}  => File a
+               | a{contents::[FSObj]} => Dir a
+
+  and if so, do extend 'contents' to the 'FSObj' type automatically? i.e.
+
+    instance FSObj{contents::[Byte]} where
+      contents (File r) = r#contents
+      contents _        = default_contents -- where 'default_contents' is the 'error "no field \"contents\""'
+
+    instance FSObj{contents::[FSObj]} where
+      contents (Dir r) = r#contents
+      contents _       = default_contents
+
+- can we get type inference with extensible records?
+
+  the jones and jones paper did not have proper extensible records i
+  don't think (but what i write below does not convince ... need to
+  look again).  they had weird stuff like
+
+    f :: r\x => {r|x::T}
+    f r = {r|x=t} -- t::T
+
+  where 'f' is a function that adds a field '{x::T}' to it's argument
+  record. the type is enforcing that the argument record must no
+  already have a field 'x' of type 'T'.  similarly, a function that
+  expects a field of 'x' of type 'T', has a type like
+
+    f :: {r\x} => {r|x::T} -> T
+    f r = r#x
+
+  why do they needs types like this? 
+
+  - do we really care about adding a field to a record?
+
+    probably yes ...
+
+  - why can't we write the types as I have, e.g.
+
+      f r = r#x
+
+    has the type i've given 'x', i.e.
+
+      f :: a{x::t} => a -> t
+
+- do we really want to automatically derive the unsafe selectors for
+  sum types?
+
+  easy enough to only derive the monadic selectors for sum types,
+  while still deriving pure selectors for records, where we know the
+  functions are total.  this is the approach taken by fclabels (and
+  it's annoying when you know you're right, but maybe only because the
+  monadic and pure lens' don't compose well?)?
+
+- first class records are simply first class support for labeled
+  products.  should we provide first class support for labeled sums as
+  well?
+
+  a haskell adt is a labeled sum of optionally labeled products.  some
+  of the problems with records have to do with us wanting to reuse the
+  labels in the products.  but sometimes we also want to reuse the
+  labels on the sums too.  e.g.
+
+    data Exp1 = App Exp1 Exp1 ...
+    data Exp2 = App Exp2 Exp2 ...
+
+  now gadts can help here, when Exp1 and Exp2 really are similar, but
+  this approach is non-extensible: if you want to have many things
+  that with 'App' constructors, they all must be squashed into the
+  'Exp s' gadt.
+
+  first class labeled sums might make type errors really bad, and for
+  that matter first class labeled products may already be bad in this
+  respect.  e.g., do we really want to infer a type like
+
+    f :: a=|App::e1 -> e2 -> a|= => a -> (e1,e2)
+
+  for a function like?
+
+    f (App e1 e2) = (e1,e2)
+
+  and then
+
+    type Exp1 = =|App Exp1 Exp1 | ... |=
+    type Exp2 = =|App Exp2 Exp2 | ... |=
+
+  whereas currently we'd get a type like
+
+    f :: Exp1 -> (Exp1,Exp1)
+
+  it's probably a good thing that haskell currently complains when we
+  try to match on fields that don't exist. making algebraic datatypes
+  too first class could lead to things type checking when they
+  shouldn't, unless they are annotated.
+
+  maybe this is similar to the way that in generic programming, you
+  trade flexibility in coding for less confidence when your code type
+  checks (consider generic functions that work on any type 'Data t =>
+  ...', but silently do nothing when 't' is wrong)? if "yes", is there
+  some best-of-both-worlds to be achieved here? do the generic
+  programming folks think about this? is it a fundamental trade-off?
+* example where modifiers would be nice
+any xmonad config example,
+e.g. http://www.haskell.org/haskellwiki/Xmonad/Config_archive/John_Goerzen%27s_Configuration
+
+it's full of stuff like
+: main = do
+:   xmonad $ defaultConfig {
+:          manageHook = manageDocks <+> manageHook defaultConfig,
+:          layoutHook = avoidStruts  $  layoutHook defaultConfig
+:          }
+which could be written better with modifiers:
+: main = do
+:   xmonad $ defaultConfig {
+:          manageHook @= (manageDocks <+>), 
+:          layoutHook @= avoidStruts
+:          }
+or more primitively:
+: main = do
+:   xmonad . mod #manageHook (manageDocks <+>)
+:          . mod #layoutHook avoidStruts
+:          $ defaultConfig
+
+this is already supported by fc-labels, but fc-labels is a little
+painful.
+* links
+- http://www.haskell.org/pipermail/glasgow-haskell-users/2011-September/020897.html
+- http://www.yesodweb.com/blog/2011/09/limitations-of-haskell
+- http://www.haskell.org/pipermail/haskell-cafe/2012-February/099024.html
+- http://www.haskell.org/pipermail/glasgow-haskell-users/2012-April/022243.html
+
+- * http://hackage.haskell.org/trac/ghc/wiki/Records: main listing page
+- * http://hackage.haskell.org/trac/haskell-prime/wiki/FirstClassLabels
+- http://www.haskell.org/haskellwiki/Extensible_record
+- http://hackage.haskell.org/trac/ghc/wiki/ExtensibleRecords
+
+- http://research.microsoft.com/en-us/um/people/simonpj/Papers/records.htm
+- http://research.microsoft.com/en-us/um/people/simonpj/Haskell/records.html
+- http://web.cecs.pdx.edu/~mpj/pubs/polyrec.html
+- http://hackage.haskell.org/trac/ghc/wiki/Records/DeclaredOverloadedRecordFields
+- http://hackage.haskell.org/trac/ghc/wiki/Records/DeclaredOverloadedRecordFields/NoMonoRecordFields
+- http://hackage.haskell.org/trac/ghc/ticket/5972
+- http://cvs.haskell.org/Hugs/pages/hugsman/exts.html: hugs trex
+- http://hackage.haskell.org/trac/ghc/search?q=Records&noquickjump=1&changeset=on&ticket=on&milestone=on&wiki=on&blog=on: search for "records"
+* MPJ email
+On Tue, Jun 19, 2012 at 9:39 PM, Mark P. Jones <mpj@cs.pdx.edu> wrote:
+> Hi All,
+>
+> A recently graduated masters student with a strong interest
+> in programming languages has asked me if there might be a
+> project, perhaps related to HASP, that he could work on as
+> a volunteer to get some experience doing research.  (He is
+> trying to decide if he wants to pursue a PhD ...)
+>
+> As many of you know, a similar situation came up a little
+> while ago, leading to the work that Aaron Altman did in
+> getting pork up and running on CompCert.  I think this was
+> a win-win situation: we got the benefit of some useful
+> contributions to the project and Aaron discovered that he
+> wanted to apply for grad school ... and has recently been
+> accepted into a PhD program on the east coast.
+>
+> My problem right now is that I'm struggling to come up with
+> an interesting problem for this new student to work on.  It
+> needs to be something fairly well-defined that doesn't need
+> a lot of day-to-day interaction.  Ideally, it would have the
+> potential to make a useful contribution to HASP, without
+> being on our immediate critical path.  But I'm open to all
+> kinds of ideas.  The student has an excellent academic record
+> and has some experience with functional programming (he took
+> my FP class last term, but had already used Haskell before
+> that).
+>
+> So I'm writing to see if anyone else can think of possible
+> project ideas that might be a good fit for this student ...
+> If you have some thoughts, even if they are only vague ideas
+> or suggestions, please let me know; perhaps we can do a
+> little brainstorming during the HASP meeting, either before
+> or after Guido's talk.
+
+Hi Mark,
+
+I have an idea for a project that:
+
+(+) I would also like to work on.
+
+(+) You have worked on in the past.
+
+(+) Involves advanced implementation (so: practical experience, in
+    case the student decides not to do a PhD, but also high-level
+    enough to be relevant to deciding if he does want to do applied
+    PhD research in programming languages).
+
+(+) Is potentially useful to HASP, but not on the critical path.
+
+(+/-) Has a long history / is controversial.
+
+The project is to add better records to GHC Haskell. I have GHC in
+mind because there was recently a lot of discussion about better
+records, and most people agree that they're needed, but as far as I
+can tell the project is stalled (most recent emails I can find are a
+few months old).
+
+Why I want to work on this:
+
+- I have been annoyed by Haskell records when using GHC.
+
+- I would like to contribute to GHC.
+
+- I am frustrated with the Trellys project and would like to
+  investigate working with the HASP folks.  Specifically, I've never
+  worked with you (I've taken classes from Jim and Andrew).
+
+We'd need to fix a design, but I know what features *I* want.  I
+believe the project is very controversial, in that their are many
+incompatible opinions on what an ideal record system should contain
+[2], so it's important to find something that is open to extension in
+areas it does not address, while making decisions for points it does
+address.  Concretely, at minimum, I would like the following features:
+
+1. first class records.
+
+2. polymorphic (type-class-based ?) field selectors.
+
+3. field selectors are lenses.
+
+I would like to talk to you about this in person, but I thought it
+would be good to write something down. I have not really done my
+homework yet: I have not read any of the many papers on records,
+including the ones by you, nor have I read most of the long
+discussions on the email list, nor most of the current proposals [2].
+I'm hoping it's useful to get the discussion started anyway, but you
+might want to put this project in the "vague" category.
+
+Cheers,
+
+-nathan
+
+[1]: http://hackage.haskell.org/trac/ghc/wiki/Records/DeclaredOverloadedRecordFields/NoMonoRecordFields
+[2]: http://hackage.haskell.org/trac/ghc/wiki/Records
+[3]: http://cvs.haskell.org/Hugs/pages/hugsman/exts.html
+
+
+
+p.s.
+
+Still to do:
+
+- Read previous mailing list discussions, proposals, papers.
+
+- Find out if a serious implementation effort is already underway.
+
+  My impression is that this is currently stalled. Stalled because no
+  one has implemented something for GHC, not because their aren't
+  enough ideas.
+
+- Figure out if the Simon's are likely to accept such a patch?
+
+  Not sure this matters, if no implementation is already under way.
+
+
+
+Discussion of minimal features (1) (2) (3):
+
+Note that I have *not* included *extensible* records in the list of
+minimal features.  I have never had a use for them in practice, and I
+(naively) expect they bring the most complication to the
+type/constraint system.  However, I hope they are an orthogonal
+feature which could be added later.  The wiki page [2] considers them
+separately.
+
+I see that Hugs had an advanced record system (TRex), with features
+(1) and (2), and extensible records [3].  I see that you have written
+at least two papers about records; I have not read them yet.  I think
+I read that SPJ once intended to implement your TRex for GHC, but then
+found the implementation too complicated.  He then made a subsequent
+proposal, with Greg Morrisett, but I believe it was also never
+implemented (because it's not in GHC now).
+
+I don't think TRex had lens-based selectors (feature (3)).  Some of
+the proposed record fixes [2] are lens based.  The ideas, if not the
+syntax, should be similar. Concretely, for (2) and (3), I want a class
+for each identifier 'x':
+
+  class #x r a where
+    #x :: Lens r a
+
+Then, we define 'Lens':
+
+  type Lens a b = { mod :: (b -> b) -> a -> a
+                  , get :: a -> b
+                  }
+  set :: Lens a b -> b -> a -> a
+  set l = #mod l . const
+
+(Ignoring the circularity of using record selectors to define record
+selectors). And lens composition:
+
+  (#.#) :: Lens b c -> Lens a b -> Lens a c
+
+  l2 #.# l1 = { mod = #mod l2 . #mod l1
+              , get = #get l2 . #get l1
+              }
+
+So, for example:
+
+  data Point2D  = { x::Int, y::Int }
+  data Pair a b = { fst::a, snd::b }
+
+  #x #.# #snd :: Lens (Pair a Point2D) Int
+
+And we could have syntactic sugar for the OO folks:
+
+  {x1.x2.x3} = #x3 #.# #x2 #.# #x1
+
+The lenses could be supplied by a library, once first-class records
+were added.  There are already many record-lens libraries for GHC,
+but, in my limited experience (I have used fclabels), the lack of
+first class records makes them cumbersome.
+
+
+
+Baby project to get started:
+
+add the '-XNoMonoRecordFields' [1] flag to GHC which disables
+generation of the usual monomorphic field selectors.  Some other
+record proposals, that use 'x' as the selector for field 'x', need
+this.  It leaves the selector syntax open, and provides a trivial
+first step in hacking on GHC.
+
+
+
+Bonus feature:
+
+Treat tuples as records with numbers for field names.  For example:
+
+  #1 :: Lens (a,b)   a
+  #1 :: Lens (a,b,c) a
+  ...
+
+This motivates using '(...)' syntax for records, like in TRex.
+* treatment of 'Lens' in above email doesn't make sense
+two problems: syntax and composition.
+** syntax
+below, in example of labels as lenses, i'm trying to use the notation
+i used in my email to MPJ, but now it's confusing me.  it's not
+defined in the email, and i think it's actually inconsistent :P
+
+the idea was:
+- '#<label>' is used to select a field from a record, similar to
+  haskell 98 where '<label>' is used for this purpose.
+- '#<label>' is also the name of a 'Lens a b' whenever 'a' has field
+  labeled by '<label>' with type 'b'.
+- a 'Lens a b' is record with two fields: 'get :: a -> b'
+  and 'mod :: (b -> b) -> a -> a'.
+
+the inconsistency: '#get' (and similar for '#mod') now refers to a
+selector function for lenses:
+: #get :: Lens a b -> a -> b
+and also to a lens for a lens:
+: #get :: Lens (Lens a b) (a -> b)
+
+solutions:
+1. a magic function 'get' that extracts the 'get' field from a 'Lens',
+   and similar for 'mod'.
+2. don't use records to define 'Lens', and instead uses positional
+   non-record constructors:
+
+   : data Lens a b = Lens (a -> b) ((b -> b) -> (a -> a))
+   and now
+   : get :: Lens a b -> (a -> b)
+   : get (Lens g _) = g
+   : mod :: Lens a b -> ((b -> b) -> (a -> a))
+   : mod (Lens _ m) = m
+
+   one minor problem: 'mod' is already used for the modulo function in
+   the prelude.
+
+   making 'mod' the primitive operation, instead of making 'set' the
+   primitive operation, is not justified.  'set' could just as well be
+   primitive, and 'mod' derived:
+   : mod l f r = set l r (f $ get l r)
+   although the composition for 'mod' is much nicer (see below for
+   more):
+   : mod1 `compose` mod2 = mod2 . mod1
+   : set1 `compose` set2 = \c r -> set2 (set1 c $ get2 r) r
+   but '(#.#)' would be a library function anyway, so this is not
+   compelling.
+** composition
+i wrote the composition as:
+: #.# :: Lens b c -> Lens a b -> Lens a c
+: Lens get1 mod1 #.# Lens get2 mod2 = Lens (get1 . get2) (mod1 . mod2)
+but actually, the 'mod' composition is backwards, and it should be
+: Lens get1 mod1 #.# Lens get2 mod2 = Lens (get1 . get2) (mod2 . mod1)
+because
+: get1 :: b -> c
+: get2 :: a -> b
+: get1 . get2 :: a -> c
+but
+: mod1 :: (c -> c) -> (b -> b)
+: mod2 :: (b -> b) -> (a -> a)
+and so
+: mod2 . mod1 :: (c -> c) -> (a -> a)
+which is elegant.
+
+on the other hand, if 'set' is the primitive, then
+: set1 :: c -> b -> b
+: set2 :: b -> a -> a
+: \c r -> set2 (set1 c $ get2 r) r :: c -> a -> a
+is much uglier.
+* scratch from MPJ email
+
+- lift field lenses over term constructors.  E.g.:
+
+    data Cheese = Cheddar { age :: Double } | Brie { age :: Double }
+    deriving MLens
+
+  Then:
+
+    ##age :: MLens Cheese Double
+
+  XXX: this is unclear: trying to make distinction between a modifier
+  that does nothing when field isn't present and a modifier that fails
+  when field isn't present.  Note that 'get' must fail when field
+  isn't present, but 'set' also includes a choice.
+
+    ageByM :: Cheese -> Double -> Maybe Cheese
+    ageByM cheese timeDelta = modM ##age (+ timeDelta) cheese
+    ageBy  :: Cheese -> Double -> Cheese
+    ageBy  cheese timeDelta = mod ##age (+ timeDelta) cheese
+
+- do GADTs present any problems?
+
+Feature (1) means, e.g., we can do:
+
+  type Point2D = { x::Int, y::Int }
+
+Feature (2) means, e.g.:
+
+  type Point3D = { x:: Int, y::Int, z::Int }
+
+and '#x' can be uses to view 'x' in both kinds of point.
+
+
+  #x :: Rec r { x::a } => r -> a
+
+Alternative 'Lens' type.
+
+  -- Modify, returning modified record and new value of modified field
+  type Lens a b = (b -> b) -> a -> (a,b)
+
+  mod :: Lens a b -> (b -> b) -> a -> a
+  set :: Lens a b ->       b  -> a -> a  
+  get :: Lens a b             -> a -> b
+
+  mod l f = fst . l f
+  set l x = mod l (const x)
+  get l   = snd . l id
+
+So, in terms of existing Haskell record syntax, we have, e.g.:
+
+  #x f p@(Point2D { x }) = (p { x = f x }, f x)
+* example where extensibility helps: keyword args and default args
+* example where treatment of labels as lenses is key: common field in a variant
+recall the file example (in MPJ and SPJ, and in this lib
+http://hackage.haskell.org/packages/archive/directory-tree/0.10.0/doc/html/System-Directory-Tree.html):
+: data FileSystem
+:   = File { name :: String, ... }
+:   | Dir  { name :: String, ... }
+
+with first class records, we'd still like to be able to treat
+'FileSystem' as having a 'name' field. with lenses based approach we
+can achieve this by defining our own '#name' instance (using notation
+slightly different from MPJ email; see [[*treatment of Lens in above
+email doesn t make sense]] for discussion):
+: instance #name FileSystem String where
+:   #name = Lens get' mod' where
+:     get' (File r) = get #name r
+:     get' (Dir r)  = get #name r
+:     mod' (File r) f = File (mod #name f r)
+:     mod' (Dir r)  f = Dir  (mod #name f r)
+moreover, this is completely mechanical, and so there could be a
+'deriving' clause for it (i.e. 'derive #name' !).  the deriving clause
+could either require the field in question to present in all
+constructors, or, could make it undefined for constructors that don't
+define it.  the unsafe version is closer to haskell 98; see next point
+([[*backwards compatibility with haskell 98 derive unsafe selectors]]) for
+a related discussion.
+* backwards compatibility with haskell 98
+** (unsafe) selectors: 'head xs'
+we can think of haskell 98 selectors as a sort of unsafe derivation of
+selectors as in the end of the previous point.  but, unlike there, we
+derive selectors, not lenses. the 'FileSystem' example becomes:
+: data FileSystem2
+:   = File { name :: String, ... }
+:   | Dir  { name :: String, ... }
+:   | NoName { ... }
+: -- Some TH magic ...
+: deriveH98Record 'Filesystem2
+which yields:
+: name :: FileSystem2 -> String
+: name (File r) = get #name r
+: name (Dir r)  = get #name r
+: name NoName   = error "'FileSystem2' constructor 'NoName' has no field 'name'"
+: -- And similar selectors for other fields
+: ...
+** named field puns: 'f (C { l }) = e'
+this is easy, since the field pun occurs in already in the position of
+record.  so, we just need a field pun syntax for records.  we can
+support both variants, i.e.
+: f (C { l }) = e
+and
+: f (C { l = value_of_l }) = e[value_of_l/l]
+** updates: 'e1 { l = e2 }'
+haskell 98 supports 'e1 { l = e2 }' syntax to update the 'l' field in
+'e1' to value 'e2'.  we can support this by:
+1. define the update syntax for 'Lens':
+   : _ { l = _ } :: #l t1 t2 => t1 -> t2 -> t1
+   : r { l = e } = set #l e r
+2. use the derivation of [[* (unsafe) selectors]] to lift the syntax from
+   records to ADTs.
+* implementation: new types and tuples (a src to src translation)
+first of all, tuples should also have 'Lens' instances for their
+components.  i.e., for each 'n' and for each '1 <= k <= n':
+: instance #k (t1,...,tn) tk where
+:   #k = Lens get mod where
+:     get   (...,xk,...) = xk
+:     mod f (...,xk,...) = (...,f xk,...)
+
+records can now be defined using newtypes that wrap tuples.
+
+the record
+: { l1:t1, ..., ln:tn }
+can be represented by
+: R_li1_..._lin ti1 ... tin ,
+where the 'lij' are the set of labels 'li' in lex order, i.e.
+: li1 < li2 < ... < lin
+and
+: { lij }_j = { li }_i ,
+and 'R_li1_..._lin' is a 'newtype' defined by:
+: newtype R_li1_..._lin ti1 ... tin = R_li1_..._lin (ti1,...,tin)
+
+the lens is then:
+: instance #lij (R_li1_..._lin ti1 ... tin) tij where
+:   #lij = Lens get mod where
+:     get   (R_... t) = get #j t
+:     mod f (R_... t) = R_... (mod #j f t)
+where an instance is defined for each 'lij' for 'j' from 1 to n.
+
+because new-types are compiled away, this should be reasonably
+efficient.
+
+it has the added bonus that tuples can be treated as lenses.
+* similarities to SPJ + GM proposal
+http://research.microsoft.com/en-us/um/people/simonpj/Haskell/records.html
+
+uses lenses internally, called 'Has r t' where I have 'Lens r t', and
+using selection instead of modification as the primitive.
+
+however, lenses are not exposed to the programmer, so compiler must
+provide everything.  in contrast, i'm proposing a sort of core
+language for records, which is useful independent of a surface syntax.
+this is important, because the choice of syntax could delay the
+addition of better records indefinitely, and so by avoiding that
+choice we can do use nicer records now, and know that our programs
+will still work if/when a surface syntax is decided on.
+
+on the other hand, most the arguments there about why their proposal
+is good apply to my proposal as well.  so, should be easy to get SPJ
+behind my proposal.
+
+* misc references
+- haskell-cafe 12 june 2012: [Haskell-cafe] Derived Read for records
+
+  questions about derived 'Read' sucking.
+- SO on "what are lenses useful for?"
+  http://stackoverflow.com/questions/10788261/what-are-lenses-used-useful-for
+
+- SO "pros/cons of lenses?"
+  http://stackoverflow.com/questions/10774614/what-are-the-advantages-and-disadvantages-of-using-lenses
+
+- "[Haskell-cafe] Record syntax, reopening a can of worms."
+
+  someone complaining about unsafe record accessors.
+* polymorphic lenses: recent development
+** email to haskell list on friday 6 july announcing lens-family package
+email:
+
+ roconnor@theorem.ca via haskell.org 10:58 AM (4 hours ago)
+	
+ to Haskell, haskell-cafe
+ I'm pleased to announce the first release of lens-family-core and lens-family.
+
+ This package provide first class(†) functional references. In
+ addition to the usual operations of getting, setting and composition,
+ plus integration with the state monad, lens families provide some
+ unique features:
+
+ - Polymorphic updating
+ - Cast projection functions to read-only lenses
+ - Cast semantic editor combinators to modify-only lenses
+
+ (†) For optimal first-class support use the lens-family package with
+ rank 2 / rank N polymorphism. Lens.Family.Clone allows for
+ first-class support of lenses for those who require Haskell 98.
+
+links:
+
+  http://hackage.haskell.org/package/lens-family-core
+  http://hackage.haskell.org/package/lens-family
+
+* related reading
+- haskells record system is a cruel joke
+
+  http://www.reddit.com/r/haskell/comments/vdg55/haskells_record_system_is_a_cruel_joke/
+
+- mirrored lenses blog post
+
+  http://www.reddit.com/r/haskell/comments/vk7fy/mirrored_lenses/
+  http://comonad.com/reader/2012/mirrored-lenses/
+
+  there is talk about record reform, and in particular these treat the
+  polymorphic update issue.
+
+- Data.Has: http://hackage.haskell.org/package/has-0.5.0.1
+
+  appears to tie the field name to the field type.  i.e., all fields
+  labeled by 'l' must have the same type.  This is baaaad.
+
+  from the tutorial
+  (https://github.com/nonowarn/has/blob/master/examples/Announce04.lhs):
+
+    More examples included in package[1]
+
+    [1]: http://github.com/nonowarn/has/tree/master/examples/
+
+    This library is inspired by HList[2], and interfaces are stealed from
+    data-accessors[3]. And lenses[4], fclabels[5], and records[6] devote
+    themselves to similar purposes.
+
+    [2]: http://hackage.haskell.org/package/HList
+    [3]: http://hackage.haskell.org/package/data-accessor
+    [4]: http://hackage.haskell.org/package/lenses
+    [5]: http://hackage.haskell.org/package/fclabels
+    [6]: http://hackage.haskell.org/package/records
+- [ ] records (see link in Data.Has bullet)
+
+  http://hackage.haskell.org/package/records
+
+  need to look more, but appears very complicated.  there is a paper
+  about this system, and it was updated in 2012.
+
+- fclabels
+- [X] lenses
+
+  http://hackage.haskell.org/package/lenses
+
+  took a brief look.  apparently based on data.accessors.
+  documentation is weak, and no updates since 2010, so probably
+  abandoned.
+
+  this uses much fancier types, some state transformer stuff, but then
+  provides some simple functions for get/set/mod.  has a 'fromGetSet'
+  function for constructing lenses.  makes sense to have an abstract
+  interface like this, e.g. 'fromGetSet' and 'fromGetMod', and then
+  whether internal implementation uses 'get' or 'mod' as primitive can
+  be changed later, e.g. if performance is really a big concern.
+
+- [ ] data-accessors
+
+  http://hackage.haskell.org/package/data-accessor
+
+  took a brief look.  this looks closest to what i want in terms of
+  the lenses.  however, i'm not sure it has a 'Has' class.
+
+  this looks like the most mature of the lens/record packages, with
+  extensive documentation, and updates in april 2012.  there are many
+  (4 or 5) packages with data-accessor prefix, so be sure to look at
+  them all:
+
+  http://hackage.haskell.org/packages/archive/pkg-list.html
+
