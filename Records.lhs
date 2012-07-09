@@ -129,23 +129,80 @@ For example:
 Solution: Type-classes and Lenses
 =================================
 
+Motivation
+----------
+
+Current Haskell records don't let us reuse field names because the
+corresponding accessor functions conflict.  For example, above we
+couldn't have `Point2D` and `Point3D` both with an `x` field, because
+then the accessor function `x` would have two incompatible types:
+
+    x :: Point2D n -> n
+    x :: Point3D n -> n
+
+What do we do in Haskell when we want two different functions with
+the same name? Make a type class!
+
+Haskell type classes let us write *ad-hoc* polymorphic functions, that
+is, functions with the same name, but which treat different types
+differently (like classes in Java).  Ad-hoc polymorphism is contrasted
+with *parametric* polymorphism, where we write a single function that
+works at many types, by treating all types uniformly (like generics in
+Java).
+
+For example, their is a standard type class `Eq` for equality
+functions:
+
+    class Eq a where
+      (==) :: a -> a -> Bool
+      (/=) :: a -> a -> Bool
+      x == y = not (x /= y)
+      x /= y = not (x == y)
+
+And we could define equality on `Point2D` by:
+
+> eqPoint2D :: Eq n => Point2D n -> Point2D n -> Bool
+> Point2D { x = x1, y = y1 } `eqPoint2D` Point2D { x = x2, y = y2 } =
+>   x1 == x2 && y1 == y2
+
+> instance Eq n => Eq (Point2D n) where
+>   (==) = eqPoint2D
+
+Of course, we could have derived that `Eq` instance automatically.
+
 Type-class for Fields
 ---------------------
 
-the point of type classes: adhoc polymorphism.  OO languages use
-classes for this purpose, and the concepts are similar (a key
-difference? )
+Make the field accessors be type-class functions.  One class per field
+name is simple.  For example:
+
+    class Has_x r t where _x :: r -> t
+
+But actually, let's make the accessors more flexible:
+
+> class Has_x r t | r -> t where _x :: Lens r t
+> class Has_y r t | r -> t where _y :: Lens r t
+> class Has_z r t | r -> t where _z :: Lens r t
+
+For now, just think of a `Lens r t` as something that lets us access
+`t`s inside of `r`s.
+
+The `Has_*` classes have two parameters, `r` and `t`.  I don't know if
+this has an analog is Java.  I think it's called a "multi method" in
+general OOP.
+
+Also, note the *functional dependency*: `| r -> t`.  It means that `t`
+is a function of `r`.  We'll come back to this later.
 
 Lens Data Type
 --------------
 
-allows us to still treat things like `Shape` above as having a
-`center` field, but also to support first class records.
+A `Lens a b` lets us view an `a` as a `b`:
 
-> data Lens a b = Lens (a -> b)               -- ^ get
->                      ((b -> b) -> (a -> a)) -- ^ mod
+> data Lens a b = Lens (a -> b)               -- get
+>                      ((b -> b) -> (a -> a)) -- mod
 
-A production implementation might keep lens data type abstract and
+A production implementation might keep the lens data type abstract and
 provide an interface via `get`, `set`, and `mod`:
 
 > get :: Lens a b -> a -> b
@@ -166,52 +223,34 @@ provide an interface via `get`, `set`, and `mod`:
 > fromGetSet get set = Lens get mod where
 >   mod f x = set (f $ get x) x
 
-Lens composition.
+Lenses are like Functions
+-------------------------
 
-> (#.#) :: Lens b c -> Lens a b -> Lens a c
-> l1 #.# l2 = Lens (get l1 . get l2) (mod l2 . mod l1)
+We can compose lenses:
 
-Lenses form a category.
+> composeLens :: Lens b c -> Lens a b -> Lens a c
+> l1 `composeLens` l2 = Lens (get l1 . get l2) (mod l2 . mod l1)
+
+And there is an identity lens:
+
+> idLens :: Lens a a
+> idLens = Lens id id
+
+In fact, there's a type class for function-like things:
 
 > instance Category Lens where
->   id  = Lens id id
->   (.) = (#.#)
-> 
+>   id  = idLens
+>   (.) = composeLens
 
-Has class: class per label
-==========================
+Examples
+========
 
-Could use type functions instead ... some people don't like
-functional dependencies.  But I think fundeps look better here.
 
-Compare
 
-    _x :: Has_x r t => Lens r t
+Record Implementation: newtypes and tuples
+==========================================
 
-with
 
-    _x :: Has_x r   => Lens r (HasT_x r)
-
-where `HasT_x` is the type function that computes the type of the
-`x` field in `r`.
-
-All the classes look the same ... could maybe parameterize by a
-label, maybe using `-XDataKinds`.
-
-> class Has_x r t | r -> t where _x :: Lens r t
-> class Has_y r t | r -> t where _y :: Lens r t
-> class Has_z r t | r -> t where _z :: Lens r t
-> 
-
-For tuples.
-
-> class Has_1 r t | r -> t where _1 :: Lens r t
-> class Has_2 r t | r -> t where _2 :: Lens r t
-> class Has_3 r t | r -> t where _3 :: Lens r t
-> 
-
-Record implementation
-=====================
 
 Fields should be lexicographically sorted, so that a record type is
 uniquely determined by the labels and types, independent of the
@@ -250,6 +289,14 @@ is already the `Has_x` instance:
 
 `Has_*` instances
 -----------------
+
+
+For tuples.
+
+> class Has_1 r t | r -> t where _1 :: Lens r t
+> class Has_2 r t | r -> t where _2 :: Lens r t
+> class Has_3 r t | r -> t where _3 :: Lens r t
+
 
 > instance Has_x (T_x_y_z tx ty tz) tx where
 >   _x = _1 . t_x_y_z
@@ -313,3 +360,8 @@ conflict with all other instances:
 > 
 
 4-tuples, 5-tuples, ...
+
+Examples
+========
+
+Shape, point2d, piont3d
