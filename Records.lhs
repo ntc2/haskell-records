@@ -245,6 +245,28 @@ In fact, there's a type class for function-like things:
 Examples
 ========
 
+Now we can write a general `shiftXBy` function (I'll use `name_` for
+the version of `name` uses `Has_*` classes):
+
+> shiftXBy_ :: (Num n, Has_x r n) => n -> r -> r
+> shiftXBy_ dx r = mod _x (+dx) r
+
+Pretending we've already defined `Shape_`, which has a `center` field,
+we could also write the `shiftYBy` more elegantly:
+
+> shiftYBy_ :: (Num n) => n -> Shape_ n -> Shape_ n
+> shiftYBy_ dx shape = mod (_y . _center) (+dx) shape
+
+Or, we could just make `Shape_` expose the fields of its center
+directly:
+
+> instance Has_y (Shape_ n) n where
+>   _y = _y . _center
+
+and use a general `shiftYBy`, analogous to `shiftXBy`:
+
+> shiftYBy_' :: (Num n, Has_y r n) => n -> r -> r
+> shiftYBy_' dy r = mod _y (+dy) r
 
 
 Record Implementation: newtypes and tuples
@@ -263,6 +285,7 @@ One `newtype T_<l1>_..._<ln>` for each record `{l1:t1,...,ln:tn}`
 in the program.
 
 > newtype T_x_y_z tx ty tz = T_x_y_z (tx, ty, tz)
+>   deriving Show
 
 A lens into the wrapped tuple.  This facilitates concise `Has_*`
 instances for the labels.
@@ -271,11 +294,12 @@ instances for the labels.
 > t_x_y_z = Lens get mod where
 >   get   (T_x_y_z t) = t
 >   mod f (T_x_y_z t) = T_x_y_z $ f t
-> 
 
 Records with one field are special.  The newtype here is the same:
 
 > newtype T_x tx = T_x tx
+>   deriving Show
+
 > t_x :: Lens (T_x tx) tx
 > t_x = Lens get mod where
 >   get   (T_x t) = t
@@ -364,4 +388,64 @@ conflict with all other instances:
 Examples
 ========
 
-Shape, point2d, piont3d
+Shape, point1d, point2d, piont3d
+
+> type Point1D_ n = T_x     n
+> type Point2D_ n = T_x_y   n n
+> type Point3D_ n = T_x_y_z n n n
+
+> data Shape_ n = Rectangle_ (T_center_height_width (Point2D_ n) n n)
+>               | Circle_    (T_center_radius (Point2D_ n) n)
+>               deriving Show
+> instance Has_center (Shape_ n) (Point2D_ n) where
+>   _center = Lens get' mod' where
+>     get' (Rectangle_ r) = get _center r
+>     get' (Circle_    r) = get _center r
+>     mod' f (Rectangle_ r) = Rectangle_ $ mod _center f r
+>     mod' f (Circle_    r) = Circle_    $ mod _center f r
+
+Boilerplate
+===========
+
+> class Has_center r t | r -> t where _center :: Lens r t
+> class Has_height r t | r -> t where _height :: Lens r t
+> class Has_width  r t | r -> t where _width  :: Lens r t
+> class Has_radius r t | r -> t where _radius :: Lens r t
+
+> newtype T_x_y tx ty = T_x_y (tx, ty)
+>   deriving Show
+> t_x_y :: Lens (T_x_y tx ty) (tx, ty)
+> t_x_y = Lens get mod where
+>   get   (T_x_y t) = t
+>   mod f (T_x_y t) = T_x_y $ f t
+
+> instance Has_x (T_x_y tx ty) tx where
+>   _x = _1 . t_x_y
+> instance Has_y (T_x_y tx ty) ty where
+>   _y = _2 . t_x_y
+
+> newtype T_center_height_width tcenter theight twidth = T_center_height_width (tcenter, theight, twidth)
+>   deriving Show
+> t_center_height_width :: Lens (T_center_height_width tcenter theight twidth) (tcenter, theight, twidth)
+> t_center_height_width = Lens get mod where
+>   get   (T_center_height_width t) = t
+>   mod f (T_center_height_width t) = T_center_height_width $ f t
+
+> instance Has_center (T_center_height_width tcenter theight twidth) tcenter where
+>   _center = _1 . t_center_height_width
+> instance Has_height (T_center_height_width tcenter theight twidth) theight where
+>   _height = _2 . t_center_height_width
+> instance Has_width (T_center_height_width tcenter theight twidth) twidth where
+>   _width  = _3 . t_center_height_width
+
+> newtype T_center_radius tcenter tradius = T_center_radius (tcenter, tradius)
+>   deriving Show
+> t_center_radius :: Lens (T_center_radius tcenter tradius) (tcenter, tradius)
+> t_center_radius = Lens get mod where
+>   get   (T_center_radius t) = t
+>   mod f (T_center_radius t) = T_center_radius $ f t
+
+> instance Has_center (T_center_radius tcenter tradius) tcenter where
+>   _center = _1 . t_center_radius
+> instance Has_radius (T_center_radius tcenter tradius) tradius where
+>   _radius = _2 . t_center_radius
