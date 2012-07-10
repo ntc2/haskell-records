@@ -81,7 +81,7 @@ different constructors of the same ADT:
     data FileSystemObj' = File' { name' :: String, contents' :: String }
                         | Dir'  { name' :: String, contents' :: [FileSystemObj] }
 
-causes another accessor related error:
+causes another accessor-related error:
 
     Couldn't match expected type `Char'
                 with actual type `FileSystemObj'
@@ -119,7 +119,7 @@ It's natural to nest records inside other records:
 But then updates are awkward:
 
 > shiftYBy :: (Num n) => n -> Shape n -> Shape n
-> shiftYBy dy p = p { center = (center p) { y = (y . center) p + dy } }
+> shiftYBy dy shape = shape { center = (center shape) { y = (y . center) shape + dy } }
 
 For example:
 
@@ -182,7 +182,6 @@ But actually, let's make the accessors more flexible:
 
 > class Has_x r t | r -> t where _x :: Lens r t
 > class Has_y r t | r -> t where _y :: Lens r t
-> class Has_z r t | r -> t where _z :: Lens r t
 
 For now, just think of a `Lens r t` as something that lets us access
 `t`s inside of `r`s.
@@ -257,6 +256,10 @@ we could also write the `shiftYBy` more elegantly:
 > shiftYBy_ :: (Num n) => n -> Shape_ n -> Shape_ n
 > shiftYBy_ dx shape = mod (_y . _center) (+dx) shape
 
+Recall the first version:
+
+    shiftYBy dy shape = shape { center = (center shape) { y = (y . center) shape + dy } }
+
 Or, we could just make `Shape_` expose the fields of its center
 directly:
 
@@ -272,28 +275,138 @@ and use a general `shiftYBy`, analogous to `shiftXBy`:
 Record Implementation: newtypes and tuples
 ==========================================
 
+Record `newtype`s
+-----------------
 
+One `newtype T_<l1>_..._<ln>` for each record `{l1:t1,...,ln:tn}` in
+the program.
 
-Fields should be lexicographically sorted, so that a record type is
-uniquely determined by the labels and types, independent of the
-order the labels are given.
+For example, a `Point2D` could just be an alias for
+record with `x` and `y` fields:
 
-Tuple in a newtype
-------------------
-
-One `newtype T_<l1>_..._<ln>` for each record `{l1:t1,...,ln:tn}`
-in the program.
-
-> newtype T_x_y_z tx ty tz = T_x_y_z (tx, ty, tz)
+> newtype T_x_y tx ty = T_x_y (tx, ty)
 >   deriving Show
 
-A lens into the wrapped tuple.  This facilitates concise `Has_*`
-instances for the labels.
+    type Point2D_ n = T_x_y n n
 
-> t_x_y_z :: Lens (T_x_y_z tx ty tz) (tx, ty, tz)
-> t_x_y_z = Lens get mod where
->   get   (T_x_y_z t) = t
->   mod f (T_x_y_z t) = T_x_y_z $ f t
+The wrapped tuple `T_x_y` implements a first class record.  In a
+nice surface syntax, we might write:
+
+    type Point2D_ = { x, y :: n }
+
+The `newtype` lets us treat the wrapped tuple as a new type, for the
+purposes of defining type classes, but does not incur any run-time
+overhead.
+
+We make a lens that exposes the wrapped tuple to facilitate concise
+`Has_*` instances:
+
+> t_x_y :: Lens (T_x_y tx ty) (tx, ty)
+> t_x_y = Lens get mod where
+>   get   (T_x_y t) = t
+>   mod f (T_x_y t) = T_x_y $ f t
+
+`Has_*` Instances
+-----------------
+
+We access tuple components by position:
+
+> class Has_1 r t | r -> t where _1 :: Lens r t
+> class Has_2 r t | r -> t where _2 :: Lens r t
+
+> instance Has_1 (t1,t2) t1 where
+>   _1 = Lens get mod where
+>     get   (x1,x2) = x1 -- fst
+>     mod f (x1,x2) = (f x1,x2)
+> instance Has_2 (t1,t2) t2 where
+>   _2 = Lens get mod where
+>     get   (x1,x2) = x2 -- snd
+>     mod f (x1,x2) = (x1,f x2)
+
+A record just maps field names onto the underlying tuple components:
+
+> instance Has_x (T_x_y tx ty) tx where
+>   _x = _1 . t_x_y
+> instance Has_y (T_x_y tx ty) ty where
+>   _y = _2 . t_x_y
+
+We used `t_x_y`, the lens into the underlying tuple, but we could also
+have written the instances directly:
+
+    instance Has_x (T_x_y tx ty) tx where
+      _x = Lens get' mod' where
+        get'   (T_x_y t) = get _1 t
+        mod' f (T_x_y t) = T_x_y $ mod _1 f t
+
+Examples
+========
+
+Points of various dimensions
+----------------------------
+
+> type Point1D_ n = T_x     n
+> type Point2D_ n = T_x_y   n n
+> type Point3D_ n = T_x_y_z n n n
+
+> p1 :: Point1D_ Int
+> p1 = T_x 1
+> p2 :: Point2D_ Int
+> p2 = T_x_y (2,2)
+> p3 :: Point3D_ Int
+> p3 = T_x_y_z (3,3,3)
+
+    ghci> shiftXBy_ 1 p1
+    T_x 2
+    ghci> shiftXBy_ 1 p2
+    T_x_y (3,2)
+    ghci> shiftXBy_ 1 p3
+    T_x_y_z (4,3,3)
+
+Shapes
+------
+
+> data Shape_ n = Rectangle_ (T_center_height_width (Point2D_ n) n n)
+>               | Circle_    (T_center_radius (Point2D_ n) n)
+>               deriving Show
+
+Each shape has a center, so we expose it as a field:
+
+> instance Has_center (Shape_ n) (Point2D_ n) where
+>   _center = Lens get' mod' where
+>     get' (Rectangle_ r) = get _center r
+>     get' (Circle_    r) = get _center r
+>     mod' f (Rectangle_ r) = Rectangle_ $ mod _center f r
+>     mod' f (Circle_    r) = Circle_    $ mod _center f r
+
+Note that `Shape_` has a `center` field, but is *not* a record.
+
+In a surface language, we'd expect to be able to derive the
+`Has_center` instance for `Shape_`.
+
+> rectangle, circle :: Shape_ Int
+> rectangle = Rectangle_ (T_center_height_width (T_x_y (1,1), 1, 1))
+> circle    = Circle_    (T_center_radius       (T_x_y (1,1), 1))
+
+    ghci> shiftYBy_ 1 rectangle
+    Rectangle_ (T_center_height_width (T_x_y (1,2),1,1))
+
+    ghci> shiftYBy_' 1 circle
+    Circle_ (T_center_radius (T_x_y (1,2),1))
+
+    ghci> get (_x . _center) circle
+    1
+
+The End
+=======
+
+1-tuples / Single-field Records
+===============================
+
+Haskell doesn't have 1-tuples and an identity instance would
+conflict with all other instances:
+
+    instance Has_1 t1 t1 where
+      _1 = id
 
 Records with one field are special.  The newtype here is the same:
 
@@ -305,22 +418,18 @@ Records with one field are special.  The newtype here is the same:
 >   get   (T_x t) = t
 >   mod f (T_x t) = T_x $ f t
 
-, but the has-instance is degenerate, since the "tuple lens" `t_x`
+But, the has-instance is degenerate, since the "tuple lens" `t_x`
 is already the `Has_x` instance:
 
 > instance Has_x (T_x tx) tx where
 >   _x = _1 . t_x where _1 = id
 
-`Has_*` instances
------------------
+Or just
 
+    _x = t_x
 
-For tuples.
-
-> class Has_1 r t | r -> t where _1 :: Lens r t
-> class Has_2 r t | r -> t where _2 :: Lens r t
-> class Has_3 r t | r -> t where _3 :: Lens r t
-
+Boilerplate
+===========
 
 > instance Has_x (T_x_y_z tx ty tz) tx where
 >   _x = _1 . t_x_y_z
@@ -329,100 +438,14 @@ For tuples.
 > instance Has_z (T_x_y_z tx ty tz) tz where
 >   _z = _3 . t_x_y_z
 
-We use `t_x_y_z`, the lens into the underlying tuple, but we could
-also write the instances directly, e.g.:
+> class Has_z r t | r -> t where _z :: Lens r t
 
-> {-
-> instance Has_x (T_x_y_z tx ty tz) tx where
->   _x = Lens get' mod' where
->     get'   (T_x_y_z t) = get _1 t
->     mod' f (T_x_y_z t) = T_x_y_z $ mod _1 f t
-> -}
-
-Tuple `Has_*` instances
-=======================
-
-1-tuples
---------
-
-Haskell doesn't have 1-tuples and an identity instance would
-conflict with all other instances:
-
-> {-
-> instance Has_1 t1 t1 where
->   _1 = id
-> -}
-
-2-tuples
---------
-
-> instance Has_1 (t1,t2) t1 where
->   _1 = Lens get mod where
->     get   (x1,x2) = x1 -- fst
->     mod f (x1,x2) = (f x1,x2)
-> instance Has_2 (t1,t2) t2 where
->   _2 = Lens get mod where
->     get   (x1,x2) = x2 -- snd
->     mod f (x1,x2) = (x1,f x2)
-> 
-
-3-tuples
---------
-
-> instance Has_1 (t1,t2,t3) t1 where
->   _1 = Lens get mod where
->     get   (x1,x2,x3) = x1
->     mod f (x1,x2,x3) = (f x1,x2,x3)
-> instance Has_2 (t1,t2,t3) t2 where
->   _2 = Lens get mod where
->     get   (x1,x2,x3) = x2
->     mod f (x1,x2,x3) = (x1,f x2,x3)
-> instance Has_3 (t1,t2,t3) t3 where
->   _3 = Lens get mod where
->     get   (x1,x2,x3) = x3
->     mod f (x1,x2,x3) = (x1,x2,f x3)
-> 
-
-4-tuples, 5-tuples, ...
-
-Examples
-========
-
-Shape, point1d, point2d, piont3d
-
-> type Point1D_ n = T_x     n
-> type Point2D_ n = T_x_y   n n
-> type Point3D_ n = T_x_y_z n n n
-
-> data Shape_ n = Rectangle_ (T_center_height_width (Point2D_ n) n n)
->               | Circle_    (T_center_radius (Point2D_ n) n)
->               deriving Show
-> instance Has_center (Shape_ n) (Point2D_ n) where
->   _center = Lens get' mod' where
->     get' (Rectangle_ r) = get _center r
->     get' (Circle_    r) = get _center r
->     mod' f (Rectangle_ r) = Rectangle_ $ mod _center f r
->     mod' f (Circle_    r) = Circle_    $ mod _center f r
-
-Boilerplate
-===========
+> class Has_3 r t | r -> t where _3 :: Lens r t
 
 > class Has_center r t | r -> t where _center :: Lens r t
 > class Has_height r t | r -> t where _height :: Lens r t
 > class Has_width  r t | r -> t where _width  :: Lens r t
 > class Has_radius r t | r -> t where _radius :: Lens r t
-
-> newtype T_x_y tx ty = T_x_y (tx, ty)
->   deriving Show
-> t_x_y :: Lens (T_x_y tx ty) (tx, ty)
-> t_x_y = Lens get mod where
->   get   (T_x_y t) = t
->   mod f (T_x_y t) = T_x_y $ f t
-
-> instance Has_x (T_x_y tx ty) tx where
->   _x = _1 . t_x_y
-> instance Has_y (T_x_y tx ty) ty where
->   _y = _2 . t_x_y
 
 > newtype T_center_height_width tcenter theight twidth = T_center_height_width (tcenter, theight, twidth)
 >   deriving Show
@@ -449,3 +472,31 @@ Boilerplate
 >   _center = _1 . t_center_radius
 > instance Has_radius (T_center_radius tcenter tradius) tradius where
 >   _radius = _2 . t_center_radius
+
+
+3-tuples
+--------
+
+> newtype T_x_y_z tx ty tz = T_x_y_z (tx, ty, tz)
+>   deriving Show
+
+> t_x_y_z :: Lens (T_x_y_z tx ty tz) (tx, ty, tz)
+> t_x_y_z = Lens get mod where
+>   get   (T_x_y_z t) = t
+>   mod f (T_x_y_z t) = T_x_y_z $ f t
+
+> instance Has_1 (t1,t2,t3) t1 where
+>   _1 = Lens get mod where
+>     get   (x1,x2,x3) = x1
+>     mod f (x1,x2,x3) = (f x1,x2,x3)
+> instance Has_2 (t1,t2,t3) t2 where
+>   _2 = Lens get mod where
+>     get   (x1,x2,x3) = x2
+>     mod f (x1,x2,x3) = (x1,f x2,x3)
+> instance Has_3 (t1,t2,t3) t3 where
+>   _3 = Lens get mod where
+>     get   (x1,x2,x3) = x3
+>     mod f (x1,x2,x3) = (x1,x2,f x3)
+> 
+
+4-tuples, 5-tuples, ...
