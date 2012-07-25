@@ -801,6 +801,8 @@ links:
   http://hackage.haskell.org/package/lens-family
 
 * related reading
+- Data.HList
+
 - haskells record system is a cruel joke
 
   http://www.reddit.com/r/haskell/comments/vdg55/haskells_record_system_is_a_cruel_joke/
