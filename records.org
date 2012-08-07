@@ -1,7 +1,35 @@
 haskell records are not very good
 
 see also http://hackage.haskell.org/package/records
+* TODO
+** TODO start implementation
+** TODO learn about lenses allowing polymorphic update
+can these be incorporated, e.g. if
+: Lens a b = forall f. Functor f => (b -> f b) -> (a -> f a)
+or whatever the type is ...
+** TODO email list when implementation is up
+* summary of my proposal
+- high level: undefined. no syntax is proposed, but i expect that my
+  middle-level can support a good surface syntax, and even allow
+  backwards support for haskell98 syntax
 
+- middle level: defined. lenses and a "has" class are defined and
+  backed by a low-level implementation.  key: the middle level is
+  already quite usable without the high-level (surface) syntax, except
+  that record creation is a little painful.
+
+- low level: undefined. implementation is undefined, but I propose an
+  example implementation using tuples and new types.
+* holes in my proposal
+- [ ] syntax for declaring record types
+
+  maybe: {l1=v1, ..., ln=vn}::{l1::t1,...,ln::tn} ?
+
+  synonyms would be useful, e.g.
+
+    tupe r = {l1::t1,...,ln::tn}
+
+- [ ] syntax for creating record literals
 * problems include:
 - can't reuse field names across different sum types. e.g.
 
@@ -678,6 +706,24 @@ define it.  the unsafe version is closer to haskell 98; see next point
 ([[*backwards compatibility with haskell 98 derive unsafe selectors]]) for
 a related discussion.
 * backwards compatibility with haskell 98
+seems we could compile most haskell 98 records features/syntax onto
+this proposal.
+
+the motivation for compiling h98 records into these new records is to
+avoid maintaining two implementations.  however, it's quite possible
+that mapping the old records onto the new records is much more
+complicated than just maintaining two implementations: the basic parts
+of the h98 records are probably quite simple, and supporting h98
+syntax will require treating expressions specially based on whether
+they are old or new records, independent of the backing implementation?
+
+** general question: granularity of choice between old and new records?
+can we make it easy for the use of haskell 98 records to be
+per-module?  if we have to compile the whole program using either new
+or old records, then we are probably sunk.  the difficulty seems to be
+that in a given module that imports both old and new records code, the
+meaning of an expression depends a lot on the types.  e.g., a pattern
+match.
 ** (unsafe) selectors: 'head xs'
 we can think of haskell 98 selectors as a sort of unsafe derivation of
 selectors as in the end of the previous point.  but, unlike there, we
@@ -696,7 +742,7 @@ which yields:
 : -- And similar selectors for other fields
 : ...
 ** named field puns: 'f (C { l }) = e'
-this is easy, since the field pun occurs in already in the position of
+this is easy, since the field pun already occurs in the position of
 record.  so, we just need a field pun syntax for records.  we can
 support both variants, i.e.
 : f (C { l }) = e
@@ -710,6 +756,21 @@ haskell 98 supports 'e1 { l = e2 }' syntax to update the 'l' field in
    : r { l = e } = set #l e r
 2. use the derivation of [[* (unsafe) selectors]] to lift the syntax from
    records to ADTs.
+** pattern matching: 'case e of C y x -> b ==> case e of C { y, x } -> b'
+in haskell 98, the record is just some convenient syntax, and so you
+can pretend it's not a record and match against the fields directly,
+in declaration order.
+
+e.g., for
+: data Foo = Foo { y, x :: Int }
+:
+: foo = case Foo { x = 3, y = 5 } of
+:   Foo y x -> y `mod` x
+the 'foo' evaluates to '5 `mod` 3'.
+
+this is simple if we have syntax for pattern matching against records,
+which we expect to have.  solution: just replace 'Foo y x' by 
+'Foo {y, x}'.
 * implementation: new types and tuples (a src to src translation)
 first of all, tuples should also have 'Lens' instances for their
 components.  i.e., for each 'n' and for each '1 <= k <= n':
@@ -870,4 +931,3 @@ links:
   them all:
 
   http://hackage.haskell.org/packages/archive/pkg-list.html
-
