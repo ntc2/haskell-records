@@ -5,4 +5,4 @@
 # This is dumb, pandoc should support more than two levels of headers
 # in markdown+lhs mode :P
 %.safe.lhs: %.lhs
-	pandoc --standalone --toc -f markdown+lhs -t markdown+lhs $< > $@
+	pandoc -f markdown+lhs -t markdown+lhs $< > $@

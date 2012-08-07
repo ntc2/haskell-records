@@ -119,7 +119,8 @@ It's natural to nest records inside other records:
 But then updates are awkward:
 
 > shiftYBy :: (Num n) => n -> Shape n -> Shape n
-> shiftYBy dy shape = shape { center = (center shape) { y = (y . center) shape + dy } }
+> shiftYBy dy shape =
+>   shape { center = (center shape) { y = (y . center) shape + dy } }
 
 For example:
 
@@ -258,7 +259,8 @@ we could also write the `shiftYBy` more elegantly:
 
 Recall the first version:
 
-    shiftYBy dy shape = shape { center = (center shape) { y = (y . center) shape + dy } }
+    shiftYBy dy shape = 
+      shape { center = (center shape) { y = (y . center) shape + dy } }
 
 Or, we could just make `Shape_` expose the fields of its center
 directly:
