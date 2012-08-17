@@ -7,6 +7,12 @@ see also http://hackage.haskell.org/package/records
 can these be incorporated, e.g. if
 : Lens a b = forall f. Functor f => (b -> f b) -> (a -> f a)
 or whatever the type is ...
+
+*** the type: =(b -> f b') -> (a -> f a')=
+the type of fancy van laarhoven lenses:
+: Lens a a' b b' = forall f. Functor f => 
+:   (b -> f b') -> (a -> f a')
+
 ** TODO email list when implementation is up
 * summary of my proposal
 - high level: undefined. no syntax is proposed, but i expect that my
@@ -361,6 +367,22 @@ painful.
 - http://hackage.haskell.org/trac/ghc/ticket/5972
 - http://cvs.haskell.org/Hugs/pages/hugsman/exts.html: hugs trex
 - http://hackage.haskell.org/trac/ghc/search?q=Records&noquickjump=1&changeset=on&ticket=on&milestone=on&wiki=on&blog=on: search for "records"
+
+- /what haskell records need/ on haskell cafe, august 1 2012:
+  https://groups.google.com/forum/?fromgroups#!topic/haskell-cafe/QJu9i1jV69Q[1-25]
+
+  - has some talk of the new lenses re poly update.
+  - person who wrote the (poorly written) /syntax directed name
+    resolution/ proposal chimes in an asks for feedback.
+  - the OP wants semantic editor combinator (SECs) which appear to
+    just be the updater in a get/update lens.
+  - the 'compose = (.)' in the aug 3 ryan ingram email looks
+    backwards.
+  - argues that the proliferation of lenses packages indicates
+    something is missing from the standard lib.
+- /haskell weekly news issue 233/ on haskell, june 27 2012:
+  mentions records a few times
+
 * MPJ email
 On Tue, Jun 19, 2012 at 9:39 PM, Mark P. Jones <mpj@cs.pdx.edu> wrote:
 > Hi All,
