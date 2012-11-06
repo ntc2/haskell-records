@@ -1,8 +1,9 @@
 {-# LANGUAGE MultiParamTypeClasses
   , FunctionalDependencies
   , FlexibleInstances
---  , KindSignatures
---  , DataKinds
+  , KindSignatures
+  , DataKinds
+  , GADTs
   #-}
 module Records where
 
@@ -24,7 +25,7 @@ mod (Lens _ m) = m
 set :: Lens a b -> b -> a -> a
 set l x = mod l (const x)
 
--- 'Lens' coposition.
+-- 'Lens' composition.
 (#.#) :: Lens b c -> Lens a b -> Lens a c
 l1 #.# l2 = Lens (get l1 . get l2) (mod l2 . mod l1)
 -- Can use 'Control.Category' instead.
@@ -52,6 +53,27 @@ instance Category Lens where
 -- ----------------------------
 class Has l r t | l r -> t where
   (#) :: l -> Lens r t
+
+
+-- ... or more type safe ...
+data LabelKind
+ = LT1 -- ^ The label type (LT) of the label "1"
+ | LT2
+ | LT3
+ | LTx
+ | LTy
+ | LTz
+
+data Label :: LabelKind -> * where
+  L1 :: Label LT1
+  L2 :: Label LT2
+  L3 :: Label LT3
+  Lx :: Label LTx
+  Ly :: Label LTy
+  Lz :: Label LTz
+
+class HasK l r t | l r -> t where
+  (##) :: Label l -> Lens r t
 
 -- Labels.  Maybe -XDataKinds could be used to make 'Has' only take
 -- label types?
@@ -91,6 +113,10 @@ t_x_y_z = Lens get mod where
   get   (T_x_y_z t) = t
   mod f (T_x_y_z t) = T_x_y_z $ f t
 
+instance HasK LTx (R_x_y_z tx ty tz) tx where
+  (##) Lx = Lens get mod where
+    get   (R_x_y_z x _ _) = x
+    mod f (R_x_y_z x y z) = R_x_y_z (f x) y z
 instance Has L_x (R_x_y_z tx ty tz) tx where
   (#) L_x = Lens get mod where
     get   (R_x_y_z x _ _) = x
@@ -136,6 +162,9 @@ instance Has_z (T_x_y_z tx ty tz) tz where
     mod' f (T_x_y_z t) = T_x_y_z $ mod _3 f t
 -}
 -- Or using the tuple lens:
+instance HasK LTx (T_x_y_z tx ty tz) tx where
+  (##) Lx = _1 . t_x_y_z
+
 instance Has_x (T_x_y_z tx ty tz) tx where
   _x = _1 . t_x_y_z
 instance Has_y (T_x_y_z tx ty tz) ty where
