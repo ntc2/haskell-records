@@ -955,3 +955,21 @@ links:
   them all:
 
   http://hackage.haskell.org/packages/archive/pkg-list.html
+* pl club presentation
+at a very high level, i'm proposing a few things:
+- addition of (for now non-extensible, since that's what complicated
+  the implementation according to spj) first class records to haskell
+- type class for record field lenses
+- derivation of type class for records and adts
+- backwards compatibility with haskell 98
+
+so, there are two main ingredients: first class records, and has class
+with lenses. or maybe that's three things: records, has class, lenses?
+** things to add
+- [ ] stacked state transformer example, from ez yang blog: can i make
+  this work cleanly with lenses and has records?
+- [-] polymorphic lenses
+  - [X] a least an obvious version
+  - [ ] and probably a van laarhoven version
+- [X] has class uses first class labels, for label polymorphism
+  - see RecordsHodgepodge.hs
