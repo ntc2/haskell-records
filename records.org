@@ -968,6 +968,13 @@ with lenses. or maybe that's three things: records, has class, lenses?
 ** things to add
 - [ ] stacked state transformer example, from ez yang blog: can i make
   this work cleanly with lenses and has records?
+
+  turns out it was readers:
+  http://blog.ezyang.com/2010/07/implicit-parameters-in-haskell/ lost
+  2 hours looking for that (good two hours thought :D)
+
+  could also look in trellys code, or maybe in unbound code.
+
 - [-] polymorphic lenses
   - [X] a least an obvious version
   - [ ] and probably a van laarhoven version
