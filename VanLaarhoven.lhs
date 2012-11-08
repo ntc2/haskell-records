@@ -1,9 +1,8 @@
 Based on http://twanvl.nl/blog/haskell/cps-functional-references and
-http://r6.ca/blog/20120623T104901Z.html
+http://r6.ca/blog/20120623T104901Z.html.  Spoiler alert: all the
+exercise solutions can be found on those pages.
 
 > {-# LANGUAGE Rank2Types #-}
-> import Control.Applicative
-> import Control.Monad.Identity
 
 Part 1:
 
@@ -31,7 +30,8 @@ the type 'Lens' defined by:
 > type Lens a b =
 >   forall f. Functor f => (b -> f b) -> (a -> f a)
 
-The main thing here is figuring out how to instantiate the 'Functor f'.
+Hint: The main thing here is figuring out how to instantiate the
+'Functor f'.  Standard library (non 'Prelude') functors suffice ...
 
 (b) Test your definitions of 'get', 'modify', and 'set', by defining:
 
@@ -98,19 +98,16 @@ s.t. 'test2' evaluates to 'True':
 
 SOLUTION 1:
 
-> get    = pget
-> modify = pmodify
-> set    = pset
-> l1     = pl1
-> l2     = pl2
-
-:D
+> get    l   a = undefined
+> modify l m a = undefined
+> set    l b a = undefined
+> l1 f (x,y)   = undefined
+> l2 f (x,y)   = undefined
 
 SOLUTION 2:
 
-> pget    l   = getConst . l Const
-> pmodify l m = runIdentity . l (Identity . m)
-> pset    l b = pmodify l (const b)
-> pl1 f (x,y) = fmap (\x' -> (x',y)) (f x)
-> pl2 f (x,y) = fmap (\y' -> (x,y')) (f y)
-
+> pget    l   a = undefined
+> pmodify l m a = undefined
+> pset    l b a = undefined
+> pl1 f (x,y)   = undefined
+> pl2 f (x,y)   = undefined
