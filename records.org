@@ -746,6 +746,27 @@ or old records, then we are probably sunk.  the difficulty seems to be
 that in a given module that imports both old and new records code, the
 meaning of an expression depends a lot on the types.  e.g., a pattern
 match.
+** selectors
+there is a trick here using a type class for lenses, and then making
+an instance for functions (the (->) instance in the "type classes to
+the rescue" section):
+http://twanvl.nl/blog/haskell/overloading-functional-references
+
+but, it should be even easier:  e.g.
+
+  data Foo = MkFoo {unFoo :: Int}
+
+becomes
+
+  data Foo = MkFoo (R_unFoo Int)
+
+with
+
+  unFoo :: Foo -> Int
+  unFoo = get #unFoo
+
+and that's it.
+
 ** (unsafe) selectors: 'head xs'
 we can think of haskell 98 selectors as a sort of unsafe derivation of
 selectors as in the end of the previous point.  but, unlike there, we
