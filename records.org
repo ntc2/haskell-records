@@ -996,8 +996,30 @@ with lenses. or maybe that's three things: records, has class, lenses?
 
   could also look in trellys code, or maybe in unbound code.
 
-- [-] polymorphic lenses
+  there is a really nice stacking solution here:
+  http://blog.sigfpe.com/2010/02/tagging-monad-transformer-layers.html
+  introduce "level tags" and use type equalities (m ~ n) to select the
+  right level.
+
+  looking at the examples, i don't see why i wouldn't just define a
+  single record with fields for each variable i want to access.
+  ezyang says
+
+    additionally, I can’t build up a complicated record type
+
+    > Record { field1 :: Int; field2 :: String; field3 :: Bool}
+
+    incrementally as I find out values of the environment.
+
+  why not?  isn't that much easier than the rest of the these
+  approaches?  true that you have to go and change the definition of
+  Record every time you decide on a new field, but so what? that
+  should be easy ...
+
+- [X] polymorphic lenses
   - [X] a least an obvious version
-  - [ ] and probably a van laarhoven version
+    - see PolyLens.lhs
+  - [X] and probably a van laarhoven version
+    - VanLaarhoven_solutions.lhs
 - [X] has class uses first class labels, for label polymorphism
   - see RecordsHodgepodge.hs
