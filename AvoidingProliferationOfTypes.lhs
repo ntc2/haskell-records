@@ -6,7 +6,10 @@
 >   , GADTs
 >   , TypeFamilies
 >   , ConstraintKinds
+>   , FlexibleContexts
+>   , UndecidableInstances
 >   #-}
+> import GHC.Prim (Constraint)
 
 Avoid proliferation of 'Has_*' classes and label types (with 'Has *'
 class) by defining singleton types for label strings.  This encoding
@@ -49,17 +52,49 @@ compiles to
 
 
 
-Can we avoid the proliferation of record types as well?  Seems
-complicated to enforce non-duplication of labels, and label ordering,
-but probably Oleg knows how ...
+Can we avoid the proliferation of record types as well?  Sure, in the
+same way a for finite tuple encodings:
 
+XXX: do i need to ensure that 'ls' and 'ts' have the same length?
+
+> type family   HasAll (ls :: List TLabel) (ts :: List *) r :: Constraint
+> type instance HasAll 'Nil         'Nil         r = ()
+> type instance HasAll ('Cons l ls) ('Cons t ts) r = 
+>   (Has l r t, HasAll ls ts r)
+
+> data Rec :: List TLabel -> List * -> * where
+>   RNil  :: Rec Nil Nil
+>   RCons :: Label     l     ->    t
+>         -> Rec         ls          ts
+>         -> Rec (Cons l ls) (Cons t ts)
+
+> instance (l ~ l') =>
+>   Has l (Rec (Cons l' ls) (Cons t ts)) t where
+>     (#) _ = Lens get upd where
+>       get :: (Rec (Cons l' ls) (Cons t ts)) -> t
+>       get   (RCons _ t _) = t
+>       upd :: (t -> t) -> (Rec (Cons l' ls) (Cons t ts))
+>                       -> (Rec (Cons l' ls) (Cons t ts))
+>       upd f (RCons l t r) = RCons l (f t) r
+
+> instance (Has l (Rec ls ts) t) =>
+>   Has l (Rec (Cons l' ls) (Cons t' ts)) t where
+>     (#) l = Lens get' upd' where
+>       get' :: (Rec (Cons l' ls) (Cons t' ts)) -> t
+>       get'   (RCons _ _ r) = get ((#) l) r
+>       upd' :: (t -> t) -> (Rec (Cons l' ls) (Cons t' ts))
+>                        -> (Rec (Cons l' ls) (Cons t' ts))
+>       upd' f (RCons l t r) = RCons l t (upd ((#) l) f r)
+> 
 
 
 Boilerplate:
 
-XXX: I really need to put the lens defs in a separate file so don't
-have to type them over and over ...
+XXX: I really need to put these defs in a separate file so don't have
+to type them over and over ...
 
 > data Lens r t = Lens { get :: r -> t
 >                      , upd :: (t -> t) -> (r -> r)
 >                      }
+
+> data List a = Nil | Cons a (List a)
