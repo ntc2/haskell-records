@@ -215,13 +215,6 @@ and prevent duplicates.
 But, whatever, it's an excuse to do more type hacking ... without
 further ado.
 
- > type family   TAnd (b1 :: Bool) (b2 :: Bool) :: Bool
- > type instance TAnd True  True = True
- > type instance TAnd False True = False
-
-
-
-
 Copy-and-paste and search-and-replace party:
 
 > data Rec' :: List TLabel -> List * -> * where

@@ -182,13 +182,13 @@ buy this: we don't actually write these hideous records by hand, but
 rather, the compiler creates them for us, and it can order the fields
 and prevent duplicates.
 
+Moreover, the implementation below is misquided: what we really want
+to avoid is even building a duplicate-label record in the first
+place. Below approach just tries to avoid having overlapping 'Has'
+instances for them, which doesn't solve any problems.
+
 But, whatever, it's an excuse to do more type hacking ... without
 further ado.
-
- > type family   TAnd (b1 :: Bool) (b2 :: Bool) :: Bool
- > type instance TAnd True  True = True
- > type instance TAnd False True = False
-
 
 > type family   TLabelEq (t :: TLabel) (t' :: TLabel) :: Bool
 > type instance TLabelEq T             T              =  True
@@ -244,9 +244,31 @@ Record computations:
 
  > rr' = upd ((#) l1) not . set ((#) l0) "goodbye" $ rr
 
-The above instances allow overlap; the outermost field is chosen:
+The old def (above) causes an unexpected error now:
+
+    Couldn't match type `[Char]' with `Bool'
+    When using functional dependencies to combine
+      Has l (Rec' (Cons TLabel l' ls) (Cons * t ts)) t,
+        arising from the dependency `l r -> t'
+        in the instance declaration at /home/collins/v/haskell-records.git/AvoidingProliferationOfTypes.lhs:220:12
+      Has
+        (T1 'T)
+        (Rec'
+           (Cons TLabel (T0 'T) (Cons TLabel (T1 'T) (Nil TLabel)))
+           (Cons * [Char] (Cons * Bool (Nil *))))
+        Bool,
+        arising from a use of `#'
+        at /home/collins/v/haskell-records.git/AvoidingProliferationOfTypes.lhs:246:14-16
+    In the first argument of `upd', namely `((#) l1)'
+    In the first argument of `(.)', namely `upd ((#) l1) not'
+    Failed, modules loaded: none.
+
+Whereas the version we wanted to eliminate still works (i.e. the
+solution is wrong, independent of the weird failure above):
 
 > rr'' = upd ((#) l0) not $ RCons' l0 False rr
+
+Of course, this makes sense: there is no overlapping instance here :P
 
 
 Boilerplate:
