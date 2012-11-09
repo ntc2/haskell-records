@@ -911,6 +911,9 @@ links:
 
   http://www.reddit.com/r/haskell/comments/vdg55/haskells_record_system_is_a_cruel_joke/
 
+  and jokes about the insanity of the new records process:
+  http://comonad.com/reader/2012/wadlers-law-revisited/
+
 - mirrored lenses blog post
 
   http://www.reddit.com/r/haskell/comments/vk7fy/mirrored_lenses/
