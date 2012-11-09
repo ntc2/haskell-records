@@ -992,7 +992,7 @@ with lenses. or maybe that's three things: records, has class, lenses?
 
   turns out it was readers:
   http://blog.ezyang.com/2010/07/implicit-parameters-in-haskell/ lost
-  2 hours looking for that (good two hours thought :D)
+  2 hours looking for that (good two hours though :D)
 
   could also look in trellys code, or maybe in unbound code.
 
@@ -1021,5 +1021,11 @@ with lenses. or maybe that's three things: records, has class, lenses?
     - see PolyLens.lhs
   - [X] and probably a van laarhoven version
     - VanLaarhoven_solutions.lhs
+
 - [X] has class uses first class labels, for label polymorphism
-  - see RecordsHodgepodge.hs
+  - see RecordsHodgepodge.hs and AvoidingProliferationOfTypes.lhs
+  - fancy function that applies some operation to all labels in some
+    argument list?
+    - see RecordsHodgepode (look for 'labelMap' or 'HasAll')
+  - finite record combinators + has classes:
+    AvoidingProliferationOfTypes.lhs
