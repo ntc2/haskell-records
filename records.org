@@ -994,6 +994,8 @@ at a very high level, i'm proposing a few things:
 so, there are two main ingredients: first class records, and has class
 with lenses. or maybe that's three things: records, has class, lenses?
 ** things to add
+try ghc 7.6 and see if overlap avoidance works
+
 - [ ] stacked state transformer example, from ez yang blog: can i make
   this work cleanly with lenses and has records?
 
