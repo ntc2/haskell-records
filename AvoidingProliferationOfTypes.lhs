@@ -6,6 +6,7 @@
 >   , GADTs
 >   , TypeFamilies
 >   , ConstraintKinds
+>   -- , InstanceSigs
 >   , FlexibleContexts
 >   , UndecidableInstances
 >   #-}
@@ -55,37 +56,70 @@ compiles to
 Can we avoid the proliferation of record types as well?  Sure, in the
 same way a for finite tuple encodings:
 
-XXX: do i need to ensure that 'ls' and 'ts' have the same length?
-
-> type family   HasAll (ls :: List TLabel) (ts :: List *) r :: Constraint
-> type instance HasAll 'Nil         'Nil         r = ()
-> type instance HasAll ('Cons l ls) ('Cons t ts) r = 
->   (Has l r t, HasAll ls ts r)
-
 > data Rec :: List TLabel -> List * -> * where
 >   RNil  :: Rec Nil Nil
 >   RCons :: Label     l     ->    t
 >         -> Rec         ls          ts
 >         -> Rec (Cons l ls) (Cons t ts)
 
+Record projections (seem to help GHC type check).
+
+> pi1 :: Rec (Cons l ls) (Cons t ts) -> Label l
+> pi2 :: Rec (Cons l ls) (Cons t ts) -> t
+> pi3 :: Rec (Cons l ls) (Cons t ts) -> Rec ls ts
+> pi1 (RCons l _ _) = l
+> pi2 (RCons _ t _) = t
+> pi3 (RCons _ _ r) = r
+
 > instance (l ~ l') =>
 >   Has l (Rec (Cons l' ls) (Cons t ts)) t where
->     (#) _ = Lens get upd where
->       get :: (Rec (Cons l' ls) (Cons t ts)) -> t
->       get   (RCons _ t _) = t
->       upd :: (t -> t) -> (Rec (Cons l' ls) (Cons t ts))
->                       -> (Rec (Cons l' ls) (Cons t ts))
->       upd f (RCons l t r) = RCons l (f t) r
+>     (#) _ = Lens get' upd' where
+> --    get'   (RCons _ t _) = t
+> --    upd' f (RCons l t r) = RCons l (f t) r
+>       get'   r = pi2 r
+>       upd' f r = RCons (pi1 r) (f $ pi2 r) (pi3 r)
 
 > instance (Has l (Rec ls ts) t) =>
 >   Has l (Rec (Cons l' ls) (Cons t' ts)) t where
 >     (#) l = Lens get' upd' where
->       get' :: (Rec (Cons l' ls) (Cons t' ts)) -> t
->       get'   (RCons _ _ r) = get ((#) l) r
->       upd' :: (t -> t) -> (Rec (Cons l' ls) (Cons t' ts))
->                        -> (Rec (Cons l' ls) (Cons t' ts))
->       upd' f (RCons l t r) = RCons l t (upd ((#) l) f r)
-> 
+> --    get'   (RCons _ _ r) = get ((#) l) r
+> --    upd' f (RCons l t r) = RCons l t (upd ((#) l) f r)
+>       get'   r = get ((#) l) (pi3 r)
+>       upd' f r = RCons (pi1 r) (pi2 r) (upd ((#) l) f (pi3 r))
+
+
+These mysteriously don't work, but maybe '-XInstanceSigs' from GHC 7.6
+would help?  Seems to be some problem with GHC not figuring out how
+the types in the local get' and upd' definitions relate to the types
+in the instance decl (and in particular the recursive constraint in
+the second instance).
+
+Why do the projections above ('pi1', 'pi2', 'pi3') fix the problem?
+The idea is that these make signatures clear? I could factor out the
+whole 'get' and 'upd' defs maybe, with the same effect?
+
+
+ > instance (l ~ l') =>
+ >   Has l (Rec (Cons l' ls) (Cons t ts)) t where
+ >     (#) _ = Lens get upd where
+ >       get   (RCons _ t _) = t
+ >       upd f (RCons l t r) = RCons l (f t) r
+
+ Stuck here: GHC can't figure out that the tail of the rec has
+ the type in the constraint :P
+
+ XXX: Might be related to ty vars in the instance decl not being 
+ the same as the ty vars in the instance function defs ...
+
+ > instance (Has l (Rec ls ts) t) =>
+ >   Has l (Rec (Cons l' ls) (Cons t' ts)) t where
+ >     (#) l = Lens get' upd' where
+ >       get' :: (Rec (Cons l' ls) (Cons t' ts)) -> t
+ >       get'   (RCons _ _ r) = get ((#) l) r
+ >       upd' :: (t -> t) -> (Rec (Cons l' ls) (Cons t' ts))
+ >                        -> (Rec (Cons l' ls) (Cons t' ts))
+ >       upd' f (RCons l t r) = RCons l t (upd ((#) l) f r)
+
 
 
 Boilerplate:
