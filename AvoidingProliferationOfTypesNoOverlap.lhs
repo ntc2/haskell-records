@@ -82,7 +82,7 @@ Avoid repeated labels:
 
 > data Rec :: List TLabel -> List * -> * where
 >   RNil  :: Rec Nil Nil
->   RCons :: TLabelNotIn t ts
+>   RCons :: TLabelNotIn l ls
 >         => Label     l     ->    t
 >         -> Rec         ls          ts
 >         -> Rec (Cons l ls) (Cons t ts)
