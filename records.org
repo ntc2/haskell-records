@@ -14,6 +14,10 @@ the type of fancy van laarhoven lenses:
 :   (b -> f b') -> (a -> f a')
 
 ** TODO email list when implementation is up
+* GHC BUGS
+Maybe the AvoidingProliferationOfTypes.lhs and definitely
+AvoidingProliferationOfTypesNoOverlap.lhs illustrate bugs in GHC 7.4.1.
+Need to try these examples in GHC 7.6
 * summary of my proposal
 - high level: undefined. no syntax is proposed, but i expect that my
   middle-level can support a good surface syntax, and even allow
