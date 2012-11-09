@@ -2,36 +2,6 @@
 >   , FunctionalDependencies
 >   , FlexibleInstances
 >   #-}
-> import Prelude hiding ((.), id)
-> import Control.Category
-
-Or maybe better to make the type:
-
-    data PolyLens r t t' r' = ...
-
-which can be read as: 'r' can be viewed as 't', and if you change 't'
-to 't'', then 'r' changes to 'r'' ... sure would be nice to just give
-a partially applied type function:
-
-    data PolyLens f t t' =
-      PolyLens { get :: f t -> t
-               , upd :: (t -> t') -> (f t -> f t')
-               }
-
-
-    -- And what happens to the fundep ???
-    class Has l f t t' where
-      (#) :: l -> PolyLens f t t'
-
-but current haskell won't let us use this.  E.g. we can't write
-
-    instance Has L1 (\t1 -> (t1, t2)) t1 t1'
-
-because we can't write
-
-    (\t1 -> (t1, t2))
-
-at type level.
 
 
 > data PolyLens r t r' t' =
@@ -106,3 +76,42 @@ Boom goes the dynamite!
 >   let t = T_x_y (1,2)
 >   print t
 >   print $ upd _x show t
+
+
+
+
+
+
+
+
+
+
+Notes:
+
+Maybe better to make the type:
+
+    data PolyLens r t t' r' = ...
+
+which can be read as: 'r' can be viewed as 't', and if you change 't'
+to 't'', then 'r' changes to 'r'' ... sure would be nice to just give
+a partially applied type function:
+
+    data PolyLens f t t' =
+      PolyLens { get :: f t -> t
+               , upd :: (t -> t') -> (f t -> f t')
+               }
+
+
+    -- And what happens to the fundep ???
+    class Has l f t t' where
+      (#) :: l -> PolyLens f t t'
+
+but current haskell won't let us use this.  E.g. we can't write
+
+    instance Has L1 (\t1 -> (t1, t2)) t1 t1'
+
+because we can't write
+
+    (\t1 -> (t1, t2))
+
+at type level.
