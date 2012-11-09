@@ -1,3 +1,6 @@
+all: Records.html PolyLens.html LabelPolymorphism.html AvoidingProliferationOfTypes.html \
+     AvoidingProliferationOfTypesNoOverlap.html
+
 %.html: %.lhs
 	pandoc --standalone --toc -f markdown+lhs -t html+lhs $< > $@
 

@@ -14,12 +14,24 @@
 >   #-}
 > import GHC.Prim (Constraint)
 
-Avoid proliferation of 'Has_*' classes and label types (with 'Has *'
+Big Picture
+===========
+
+*Fixed* and *finite* set of types and classes for constructing *all*
+labels, records, and `Has` classes.
+
+<!--
+Avoid proliferation of `Has_*` classes and label types (with `Has *`
 class) by defining singleton types for label strings.  This encoding
 is a special case of a type-level lists and term-level het lists
 encoding.
+-->
 
+Labels
+======
 
+Singleton types
+---------------
 
 Type level label strings:
 
@@ -37,12 +49,14 @@ and a term level singleton type of indexed labels:
 >   L1 :: Label l -> Label (T1 l) -- ^ Cons 1
 > deriving instance Show (Label l)
 
-Has class:
+Has class
+---------
 
 > class Has (l :: TLabel) r t | l r -> t where
 >   (#) :: Label l -> Lens r t
 
-Example:
+Example
+-------
 
 > l0110 :: Label (T0 (T1 (T1 (T0 T))))
 > l0110 =        (L0 (L1 (L1 (L0 L))))
@@ -56,9 +70,10 @@ compiles to
     (#) l0110
 
 
+Records
+=======
 
-Can we avoid the proliferation of record types as well?  Sure, in the
-same way a for finite tuple encodings:
+Avoid proliferation of record types via nested tuple analog:
 
 > data Rec :: List TLabel -> List * -> * where
 >   RNil  :: Rec Nil Nil
@@ -66,7 +81,7 @@ same way a for finite tuple encodings:
 >         -> Rec         ls          ts
 >         -> Rec (Cons l ls) (Cons t ts)
 
-Record projections (seem to help GHC type check).
+Record projections (seem to help GHC type check the `Has` instances ...):
 
 > pi1 :: Rec (Cons l ls) (Cons t ts) -> Label l
 > pi2 :: Rec (Cons l ls) (Cons t ts) -> t
@@ -75,6 +90,7 @@ Record projections (seem to help GHC type check).
 > pi2 (RCons _ t _) = t
 > pi3 (RCons _ _ r) = r
 
+Define `Has` instances once and for all:
 
 > instance
 >   Has l (Rec (Cons l ls) (Cons t ts)) t where
@@ -84,10 +100,6 @@ Record projections (seem to help GHC type check).
 >       get'   r = pi2 r
 >       upd' f r = RCons (pi1 r) (f $ pi2 r) (pi3 r)
 
-> -- Maybe better to have an 'l `NotEq` l'' constraint here, to avoid
-> -- overlap.  Can use the tricks from TypeInequality.hs to achieve
-> -- this.
-
 > instance (Has l (Rec ls ts) t) =>
 >   Has l (Rec (Cons l' ls) (Cons t' ts)) t where
 >     (#) l = Lens get' upd' where
@@ -96,8 +108,61 @@ Record projections (seem to help GHC type check).
 >       get'   r = get ((#) l) (pi3 r)
 >       upd' f r = RCons (pi1 r) (pi2 r) (upd ((#) l) f (pi3 r))
 
+Examples
+========
 
-These mysteriously don't work, but maybe '-XInstanceSigs' from GHC 7.6
+Some labels:
+
+> l0 :: Label (T0 T)
+> l0 =         L0 L
+> l1 :: Label (T1 T)
+> l1 =         L1 L
+
+A record with two fields labeled by `l0` and `l1`:
+
+> type R_0_1 t0 t1 =
+>   Rec (Cons (T0 T) (Cons (T1 T) Nil))
+>       (Cons t0     (Cons t1     Nil))
+
+Show instances for records are a little tricky, if you want to avoid
+putting the `Show` constraint in the `RCons` constructor ...
+
+> type family   All (c:: * -> Constraint) (ts::List *) :: Constraint
+> type instance All c Nil         = ()
+> type instance All c (Cons t ts) = (c t, All c ts)
+
+> deriving instance All Show ts => Show (Rec ls ts)
+
+Record computations:
+
+> r, r' :: R_0_1 String Bool
+> r  = RCons l0 "hello" $ RCons l1 True $ RNil
+> r' = upd ((#) l1) not . set ((#) l0) "goodbye" $ r
+
+    ghci> r'
+    RCons (L0 L) "goodbye" (RCons (L1 L) False RNil)
+
+The above instances allow overlap. The outermost field is always
+chosen:
+
+> r''  = RCons l0 False r
+> r''' = upd ((#) l0) not r''
+
+    ghci> r''
+    RCons (L0 L) False (RCons (L0 L) "hello" (RCons (L1 L) True RNil))
+    ghci> r'''
+    RCons (L0 L) True  (RCons (L0 L) "hello" (RCons (L1 L) True RNil))
+
+
+The End
+=======
+
+Prenventing overlap
+===================
+
+See AvoidingProliferationOfTypesNoOverlap.lhs for better version.
+
+These mysteriously don't work, but maybe `-XInstanceSigs` from GHC 7.6
 would help?  Seems to be some problem with GHC not figuring out how
 the types in the local get' and upd' definitions relate to the types
 in the instance decl (and in particular the recursive constraint in
@@ -129,50 +194,6 @@ whole 'get' and 'upd' defs maybe, with the same effect?
  >                        -> (Rec (Cons l' ls) (Cons t' ts))
  >       upd' f (RCons l t r) = RCons l t (upd ((#) l) f r)
 
-
-Examples:
-
-Some labels:
-
-> l0 :: Label (T0 T)
-> l0 =         L0 L
-> l1 :: Label (T1 T)
-> l1 =         L1 L
-
-A record with two fields labeled by 'l0' and 'l1':
-
-> type R_0_1 t0 t1 =
->   Rec (Cons (T0 T) (Cons (T1 T) Nil))
->       (Cons t0     (Cons t1     Nil))
-
-Show instances for records are a little tricky, if you want to avoid
-putting the 'Show' constraint in the 'RCons' constructor ...
-
-> type family   All (c:: * -> Constraint) (ts::List *) :: Constraint
-> type instance All c Nil = ()
-> type instance All c (Cons t ts) = (c t, All c ts)
-
-> deriving instance All Show ts => Show (Rec ls ts)
-
-Record computations:
-
-> r, r' :: R_0_1 String Bool
-> r  = RCons l0 "hello" $ RCons l1 True $ RNil
-> r' = upd ((#) l1) not . set ((#) l0) "goodbye" $ r
-
-    ghci> r'
-    RCons (L0 L) "goodbye" (RCons (L1 L) False RNil)
-
-The above instances allow overlap. The outermost field is always
-chosen:
-
-> r''  = RCons l0 False r
-> r''' = upd ((#) l0) not r''
-
-    ghci> r''
-    RCons (L0 L) False (RCons (L0 L) "hello" (RCons (L1 L) True RNil))
-    ghci> r'''
-    RCons (L0 L) True  (RCons (L0 L) "hello" (RCons (L1 L) True RNil))
 
 Preventing overlap:
 

@@ -443,11 +443,12 @@ Example:
     1
 
 
-Next steps:
+Extensions:
 
 * <a href="PolyLens.html">Polymorphic updates</a>
-* 
-*
+* <a href="LabelPolymorphism.html">Label polymorphism</a>
+* <a href="AvoidingProliferationOfTypes.html">Finite basis for labels and records</a>
+* <a href="AvoidingProliferationOfTypesNoOverlap.html">... and no overlap</a>
 
 The End
 =======

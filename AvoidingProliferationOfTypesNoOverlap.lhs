@@ -8,9 +8,9 @@
 >   , ConstraintKinds
 >   , StandaloneDeriving
 >   -- , InstanceSigs
->   , FlexibleContexts
->   , UndecidableInstances
->   , OverlappingInstances
+>   -- , FlexibleContexts
+>   -- , UndecidableInstances
+>   -- , OverlappingInstances
 >   #-}
 > import GHC.Prim (Constraint)
 
@@ -146,7 +146,7 @@ Examples:
 
 - 'Show' instances:
 
-Show instances for records are a little tricky, if you want to avoid
+'Show' instances for records are a little tricky, if you want to avoid
 putting the 'Show' constraint in the 'RCons' constructor ...
 
 > type family   All (c:: * -> Constraint) (ts::List *) :: Constraint
