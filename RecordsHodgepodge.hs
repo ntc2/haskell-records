@@ -4,8 +4,25 @@
   , KindSignatures
   , DataKinds
   , GADTs
+  , TypeFamilies
+  , ConstraintKinds
+
   #-}
+{-
+
+  -- For HMap class
+  , MultiParamTypeClasses
+  , FlexibleInstances
+  , FunctionalDependencies
+  , UndecidableInstances
+
+  , StandaloneDeriving
+-}
 module Records where
+
+import GHC.Prim (Constraint)
+
+
 
 import Prelude hiding (mod, (.), id)
 import Control.Category
@@ -54,7 +71,6 @@ instance Category Lens where
 class Has l r t | l r -> t where
   (#) :: l -> Lens r t
 
-
 -- ... or more type safe ...
 data LabelKind
  = LT1 -- ^ The label type (LT) of the label "1"
@@ -81,6 +97,95 @@ data L_x = L_x
 data L_y = L_y
 data L_z = L_z
 
+
+
+-- Label polymorphism
+-- ------------------
+--
+-- This is an abstraction level above row polymorphism: functions
+-- which are polymorphic in the labels they act on, in addition to the
+-- rows they act on.
+
+-- (I attempted to use the prefix tick notation to make the lifted
+-- clear)
+
+-- Type level lists
+data List a = Nil | Cons a (List a)
+-- Heterogenous lists indexed by type lists
+data HList :: (List *) -> * where
+  HNil  :: HList 'Nil
+  HCons :: a -> HList as -> HList ('Cons a as)
+
+-- Constraint family.
+--
+-- The 'List *' here should be ''List *', but that's a syntax error :P
+type family   HasAll (ls :: List *) (r :: *) (t :: *) :: Constraint
+type instance HasAll 'Nil         r t = ()
+type instance HasAll ('Cons l ls) r t = (Has l r t, HasAll ls r t)
+
+-- Use constraint family to qualify type.
+--
+-- I guess this is a special case of a 'labelFoldr' ...
+labelMap :: (HasAll ls r t) => HList ls -> (t -> t) -> (r -> r)
+labelMap HNil         _ r = r
+labelMap (HCons l ls) f r = mod ((#) l) f (labelMap ls f r)
+
+xyzLabels :: HList ('Cons L_x ('Cons L_y ('Cons L_z 'Nil)))
+xyzLabels = HCons L_x (HCons L_y (HCons L_z HNil))
+
+egLabelMap = labelMap xyzLabels (^2) (R_x_y_z 1 2 3)
+-- > R_x_y_z 1 4 9
+
+
+-- Avoid proliferation of label related classes and types
+-- ------------------------------------------------------
+
+-- Characters
+
+
+
+data Atom = C0 | C1 | C2 | C3
+          | Ca | Cb | Cc | Cd
+          -- etc
+data Word :: List Atom -> * where
+  WNil :: Word Nil
+  -- Conses
+  W0   :: Word cs -> Word (Cons C0 cs)
+  W1   :: Word cs -> Word (Cons C1 cs)
+  W2   :: Word cs -> Word (Cons C2 cs)
+  W3   :: Word cs -> Word (Cons C3 cs)
+  Wa   :: Word cs -> Word (Cons Ca cs)
+  Wb   :: Word cs -> Word (Cons Cb cs)
+  Wc   :: Word cs -> Word (Cons Cc cs)
+  Wd   :: Word cs -> Word (Cons Cd cs)
+  -- etc
+
+class HasWord (ls :: List Atom) r t where
+  lensWord :: Word ls -> Lens r t
+
+-- Some labels
+abcLabel :: Word 
+
+-- Alternatively, we can avoid the proliferation of 'Word'
+-- constructors by 
+
+-- Characters
+data C'0 = C'0
+data C'1 = C'1
+data C'2 = C'2
+data C'3 = C'3
+data C'a = C'a
+data C'b = C'b
+data C'c = C'c
+data C'd = C'd
+
+type Word' = HList
+
+class HasWord' ls r t where
+  lensWord' :: Word' ls -> Lens r t
+
+
+
 -- Has: Class per label
 -- --------------------
 class Has_x r t | r -> t where
@@ -104,7 +209,7 @@ class Has_3 r t | r -> t where
 -- determined by labels, independent of order.
 
 -- Record with fields 'x', 'y', and 'z'
-data R_x_y_z tx ty tz = R_x_y_z tx ty tz
+data R_x_y_z tx ty tz = R_x_y_z tx ty tz deriving Show
 -- Or
 newtype T_x_y_z tx ty tz = T_x_y_z (tx, ty, tz)
 -- A lens for the wrapped tuple.
