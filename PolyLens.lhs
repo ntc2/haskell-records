@@ -6,6 +6,18 @@
 Lens for polymorphic update
 ===========================
 
+In Haskell we can def:
+
+    data Pair a b = Pair { pi1 :: a, pi2 :: b }
+
+and then do polymorphic updates:
+
+    p :: Pair Int Int
+    p = Pair 1 2
+    p { pi1 = "hello world" } :: Pair String Int
+
+but we can't do this with the lenses presented so far.
+
 View `r` as `t` and (polymorphically) update `t` to `t'` yielding
 `r'`:
 
