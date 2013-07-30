@@ -1,19 +1,6 @@
 haskell records are not very good
 
 see also http://hackage.haskell.org/package/records
-* TODO
-** TODO start implementation
-** TODO learn about lenses allowing polymorphic update
-can these be incorporated, e.g. if
-: Lens a b = forall f. Functor f => (b -> f b) -> (a -> f a)
-or whatever the type is ...
-
-*** the type: =(b -> f b') -> (a -> f a')=
-the type of fancy van laarhoven lenses:
-: Lens a a' b b' = forall f. Functor f => 
-:   (b -> f b') -> (a -> f a')
-
-** TODO email list when implementation is up
 * GHC BUGS
 Maybe the AvoidingProliferationOfTypes.lhs and definitely
 AvoidingProliferationOfTypesNoOverlap.lhs illustrate bugs in GHC 7.4.1.
@@ -1038,3 +1025,14 @@ try ghc 7.6 and see if overlap avoidance works
     - see RecordsHodgepode (look for 'labelMap' or 'HasAll')
   - finite record combinators + has classes:
     AvoidingProliferationOfTypes.lhs
+
+* adam gundry GSoC project
+talked to SPJ at Galois on [2013-07-29 Mon] after his tech
+talk. apparently an improved records implementation is under way!
+
+Adam's plan, with links to code:
+http://ghc.haskell.org/trac/ghc/wiki/Records/OverloadedRecordFields/Plan
+
+email threads:
+- /overloaded record fields/ (announcement):
+  http://thread.gmane.org/gmane.comp.lang.haskell.glasgow.user/23759/focus=23792
