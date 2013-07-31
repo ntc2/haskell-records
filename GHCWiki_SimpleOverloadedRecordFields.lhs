@@ -15,10 +15,10 @@ explicit field parameters):
 
 > data Field (l :: Symbol) = F
 >
-> class Get (r :: *) (f :: Symbol) (t :: *) | r f -> t where
+> class Get (r :: *) (f :: Symbol) (t :: *) where
 >   get :: Field f -> r -> t
 > 
-> class Set (r :: *) (f :: Symbol) (t :: *) | r f -> t where
+> class Set (r :: *) (f :: Symbol) (t :: *) where
 >   set :: Field f -> t -> r -> r
 
 and give a data type:
@@ -40,8 +40,9 @@ and then point out that type-changing update is not supported by their
 and then say that 'set' needs "much more complexity" to support type
 changing.
 
-However, as is well known from lenses, we just need more
-type parameters:
+However, as is well known from lenses, we just need more type
+parameters (and fundeps, but I think we want those for the earlier
+versions to, for type inference to work):
 
 > class Set' (r :: *) (f :: Symbol) (t' :: *) (r' :: *) | r f t' -> r' where
 >   set' :: Field f -> t' -> r -> r'
@@ -81,17 +82,3 @@ as before. But, we can also do the iterated update:
 The obvious downside here is that the type of 'set'' is now in terms
 of 'LinearS', and type inference will infer 'LinearS', and not 'S',
 for unannotated programs.
-
-
-
-The updaters:
-
-> upd  :: (Get r f t, Set r f t)      => Field f -> (t -> t) -> r -> r
-> upd  f m r = set f (m $ get f r) r
->
-> upd' :: (Get r f t, Set' r f t' r') => Field f -> (t -> t') -> r -> r'
-> upd' f m r = set' f (m $ get f r) r
-
-Type inference:
-
-> e = set' (F::Field "y") True . set' (F::Field "z") False $ S 1 2
