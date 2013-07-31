@@ -10,8 +10,8 @@
 The wiki
 <http://ghc.haskell.org/trac/ghc/wiki/Records/OverloadedRecordFields>
 claims that supporting type changing updates adds "much more
-complexity".  I don't buy this.  They start with (roughly: I added to
-explicit field parameters):
+complexity".  I don't buy this.  They start with (roughly: I added 
+explicit field parameters and changed some names):
 
 > data Field (l :: Symbol) = F
 >
